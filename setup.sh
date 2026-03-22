@@ -300,7 +300,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 END
 
 # Initialize hosts file for universal host capture
+mkdir -p /etc/myvpn 2>/dev/null
 touch /etc/myvpn/hosts.log 2>/dev/null
+touch /etc/myvpn/.capture-state 2>/dev/null
 
 # Create persistent storage directories
 mkdir -p /etc/xray
@@ -338,6 +340,27 @@ END
 systemctl daemon-reload >/dev/null 2>&1
 systemctl enable xray-quota-monitor >/dev/null 2>&1
 systemctl start xray-quota-monitor >/dev/null 2>&1
+
+# Create systemd service for VPN host capture (runs every 60s)
+cat > /etc/systemd/system/host-capture.service <<-END
+[Unit]
+Description=VPN Host Capture Service
+Documentation=https://github.com/LamonLind/Blue
+After=network.target xray.service nginx.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c 'while true; do /usr/bin/capture-host >/dev/null 2>&1; sleep 60; done'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+END
+
+systemctl daemon-reload >/dev/null 2>&1
+systemctl enable host-capture >/dev/null 2>&1
+systemctl start host-capture >/dev/null 2>&1
 
 cat > /home/re_otm <<-END
 7

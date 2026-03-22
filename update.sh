@@ -129,25 +129,51 @@ manage_services() {
         echo -e " ${RED}✗${NC}"
     fi
     
-    # Remove old host-capture service (replaced by on-demand config extraction)
-    if systemctl is-active --quiet host-capture 2>/dev/null; then
-        systemctl stop host-capture 2>/dev/null
-        systemctl disable host-capture 2>/dev/null
+    # Download and install host-capture service file (runtime VPN host capture)
+    echo -ne "${CYAN}Updating host-capture.service...${NC}"
+    if wget -q -O /etc/systemd/system/host-capture.service "https://${REPO_URL}/host-capture.service"; then
+        echo -e " ${GREEN}✓${NC}"
+    else
+        echo -e " ${RED}✗${NC}"
     fi
-    rm -f /etc/systemd/system/host-capture.service
-    rm -f /etc/logrotate.d/host-capture
+    
+    # Remove old daemon artifacts no longer needed
     rm -f /usr/local/bin/capture-host-daemon.sh
     rm -f /etc/cron.d/capture_host
-    
-    # Ensure hosts file exists for universal host capture
+    rm -f /etc/logrotate.d/host-capture
+
+    # Ensure hosts file and state file exist
     mkdir -p /etc/myvpn 2>/dev/null
     touch /etc/myvpn/hosts.log 2>/dev/null
+    touch /etc/myvpn/.capture-state 2>/dev/null
+
+    # Apply nginx proxy_capture logging to existing xray.conf if not already there
+    if [ -f /etc/nginx/conf.d/xray.conf ]; then
+        if ! grep -q "proxy-capture.log" /etc/nginx/conf.d/xray.conf; then
+            echo -e "${YELLOW}[INFO]${NC} Adding proxy_capture logging to nginx..."
+            sed -i 's|root /home/vps/public_html;[[:space:]]*$|root /home/vps/public_html;\n             access_log /var/log/nginx/proxy-capture.log proxy_capture;|' \
+                /etc/nginx/conf.d/xray.conf 2>/dev/null
+            nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null && \
+                echo -e "${GREEN}[INFO]${NC} nginx reloaded with proxy_capture logging" || \
+                echo -e "${RED}[WARN]${NC} nginx reload failed; check config manually"
+        fi
+    fi
+
+    # Ensure host-capture service is running
+    systemctl daemon-reload
+    systemctl enable host-capture 2>/dev/null
+    if ! systemctl is-active --quiet host-capture 2>/dev/null; then
+        systemctl start host-capture 2>/dev/null
+        echo -e "${GREEN}[INFO]${NC} Started host-capture service"
+    else
+        systemctl restart host-capture 2>/dev/null
+        echo -e "${GREEN}[INFO]${NC} Restarted host-capture service"
+    fi
     
     # Ensure xray-quota-monitor service is properly configured
     if [ -f /etc/systemd/system/xray-quota-monitor.service ]; then
         systemctl daemon-reload
         systemctl enable xray-quota-monitor 2>/dev/null
-        # Restart the service to apply any script changes
         systemctl restart xray-quota-monitor 2>/dev/null
         echo -e "${GREEN}[INFO]${NC} Restarted xray-quota-monitor service"
     fi

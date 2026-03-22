@@ -1,28 +1,13 @@
 [Unit]
-Description=Host Capture Service - Real-time VPN Host Monitoring
-After=network.target xray.service nginx.service
+Description=VPN Host Capture Service
 Documentation=https://github.com/LamonLind/Blue
+After=network.target xray.service nginx.service
 
 [Service]
 Type=simple
-User=root
-Group=root
-ExecStart=/usr/local/bin/capture-host-daemon.sh
+ExecStart=/bin/bash -c 'while true; do /usr/bin/capture-host >/dev/null 2>&1; sleep 60; done'
 Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# Security settings for full root access
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_DAC_READ_SEARCH
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_DAC_READ_SEARCH
-
-# Resource management - default scheduling for production stability
-# The service runs continuously but at normal priority to avoid impacting critical services
-# For production environments, default scheduling is recommended
-
-# Environment
-Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
