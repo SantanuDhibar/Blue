@@ -96,6 +96,9 @@ remove_systemd_files() {
     rm -f /etc/systemd/system/xray@trnone.service
     rm -f /etc/systemd/system/ws-stunnel.service
     rm -f /etc/systemd/system/host-capture.service
+    rm -f /etc/logrotate.d/host-capture
+    rm -f /usr/local/bin/capture-host-daemon.sh
+    rm -f /usr/local/bin/capture-host.sh
     
     systemctl daemon-reload
     
@@ -111,7 +114,7 @@ remove_scripts() {
         "add-ws" "add-ssws" "add-socks" "add-vless" "add-tr" "add-trgo"
         "autoreboot" "restart" "tendang" "clearlog" "running"
         "cek-trafik" "cek-speed" "cek-ram" "limit-speed"
-        "realtime-hosts"
+        "realtime-hosts" "vless-proxy-identifier"
         "menu-vless" "menu-vmess" "menu-socks" "menu-ss" "menu-trojan"
         "menu-trgo" "menu-ssh" "menu-slowdns" "menu-captured-hosts"
         "capture-host" "menu-bckp" "bckp" "usernew" "menu" "wbm" "xp"

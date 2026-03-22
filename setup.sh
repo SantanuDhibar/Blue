@@ -189,8 +189,6 @@ wget -q -O /usr/bin/cek-trafik "https://raw.githubusercontent.com/LamonLind/Blue
 wget -q -O /usr/bin/cek-speed "https://raw.githubusercontent.com/LamonLind/Blue/main/speedtes_cli.py"
 wget -q -O /usr/bin/cek-ram "https://raw.githubusercontent.com/LamonLind/Blue/main/ram.sh"
 wget -q -O /usr/bin/limit-speed "https://raw.githubusercontent.com/LamonLind/Blue/main/limit-speed.sh"
-wget -q -O /usr/bin/realtime-hosts "https://raw.githubusercontent.com/LamonLind/Blue/main/realtime-hosts.sh"
-wget -q -O /usr/bin/vless-proxy-identifier "https://raw.githubusercontent.com/LamonLind/Blue/main/vless-proxy-identifier.sh"
 wget -q -O /usr/bin/menu-vless "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-vless.sh"
 wget -q -O /usr/bin/menu-vmess "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-vmess.sh"
 wget -q -O /usr/bin/menu-socks "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-socks.sh"
@@ -236,8 +234,6 @@ chmod +x /usr/bin/cek-trafik
 chmod +x /usr/bin/cek-speed
 chmod +x /usr/bin/cek-ram
 chmod +x /usr/bin/limit-speed
-chmod +x /usr/bin/realtime-hosts
-chmod +x /usr/bin/vless-proxy-identifier
 chmod +x /usr/bin/menu-vless
 chmod +x /usr/bin/menu-vmess
 chmod +x /usr/bin/menu-ss
@@ -303,15 +299,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 2 1 * * * root /usr/bin/clearlog
 END
 
-cat > /etc/cron.d/capture_host <<-END
-SHELL=/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-# Legacy cron job for backward compatibility and fallback
-# The primary host-capture.service runs every 2 seconds for real-time monitoring
-# This cron job runs every minute as a fallback in case the service fails
-# It also ensures hosts are captured even if systemd is not available
-* * * * * root /usr/bin/capture-host >/dev/null 2>&1
-END
+# Initialize hosts file for universal host capture
+mkdir -p /etc/myvpn 2>/dev/null
+touch /etc/myvpn/hosts.log 2>/dev/null
+touch /etc/myvpn/.capture-state 2>/dev/null
 
 # Create persistent storage directories
 mkdir -p /etc/xray
@@ -324,25 +315,7 @@ touch /etc/myvpn/deleted.log 2>/dev/null
 chmod 755 /etc/myvpn/usage
 chmod 755 /etc/myvpn/blocked_users
 
-# Create systemd service for real-time host capture with safe 2-second intervals
-# Note: 2-second interval for real-time host monitoring with safe frequency (1-5 seconds)
-# This captures hosts from all incoming connections continuously
-# Uses sleep 2 for 2-second intervals - lightweight and stable
-cat > /etc/systemd/system/host-capture.service <<-END
-[Unit]
-Description=Real-time Host Capture Service (2s interval)
-Documentation=https://github.com/LamonLind/Blue
-After=network.target xray.service nginx.service
 
-[Service]
-Type=simple
-ExecStart=/bin/bash -c 'while true; do /usr/bin/capture-host >/dev/null 2>&1; sleep 2; done'
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-END
 
 # Create systemd service for xray quota monitor (3x-ui style)
 cat > /etc/systemd/system/xray-quota-monitor.service <<-END
@@ -365,10 +338,29 @@ WantedBy=multi-user.target
 END
 
 systemctl daemon-reload >/dev/null 2>&1
-systemctl enable host-capture >/dev/null 2>&1
-systemctl start host-capture >/dev/null 2>&1
 systemctl enable xray-quota-monitor >/dev/null 2>&1
 systemctl start xray-quota-monitor >/dev/null 2>&1
+
+# Create systemd service for VPN host capture (runs every 60s)
+cat > /etc/systemd/system/host-capture.service <<-END
+[Unit]
+Description=VPN Host Capture Service
+Documentation=https://github.com/LamonLind/Blue
+After=network.target xray.service nginx.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c 'while true; do /usr/bin/capture-host >/dev/null 2>&1; sleep 60; done'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+END
+
+systemctl daemon-reload >/dev/null 2>&1
+systemctl enable host-capture >/dev/null 2>&1
+systemctl start host-capture >/dev/null 2>&1
 
 cat > /home/re_otm <<-END
 7

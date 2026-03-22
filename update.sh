@@ -129,7 +129,7 @@ manage_services() {
         echo -e " ${RED}✗${NC}"
     fi
     
-    # Download and install host-capture service file
+    # Download and install host-capture service file (runtime VPN host capture)
     echo -ne "${CYAN}Updating host-capture.service...${NC}"
     if wget -q -O /etc/systemd/system/host-capture.service "https://${REPO_URL}/host-capture.service"; then
         echo -e " ${GREEN}✓${NC}"
@@ -137,50 +137,43 @@ manage_services() {
         echo -e " ${RED}✗${NC}"
     fi
     
-    # Download and install logrotate config for host-capture
-    echo -ne "${CYAN}Updating host-capture logrotate...${NC}"
-    if wget -q -O /etc/logrotate.d/host-capture "https://${REPO_URL}/host-capture-logrotate"; then
-        echo -e " ${GREEN}✓${NC}"
-    else
-        echo -e " ${RED}✗${NC}"
-    fi
-    
-    # Download capture-host-daemon.sh
-    echo -ne "${CYAN}Updating capture-host-daemon...${NC}"
-    if wget -q -O /usr/local/bin/capture-host-daemon.sh "https://${REPO_URL}/capture-host-daemon.sh"; then
-        chmod +x /usr/local/bin/capture-host-daemon.sh
-        echo -e " ${GREEN}✓${NC}"
-    else
-        echo -e " ${RED}✗${NC}"
-    fi
-    
-    # Ensure capture-host.sh is in /usr/local/bin if it exists in /usr/bin
-    # Only copy if /usr/bin version is newer or /usr/local/bin doesn't exist
-    if [ -f /usr/bin/capture-host ]; then
-        if [ ! -f /usr/local/bin/capture-host.sh ] || [ /usr/bin/capture-host -nt /usr/local/bin/capture-host.sh ]; then
-            cp /usr/bin/capture-host /usr/local/bin/capture-host.sh
-            chmod +x /usr/local/bin/capture-host.sh
+    # Remove old daemon artifacts no longer needed
+    rm -f /usr/local/bin/capture-host-daemon.sh
+    rm -f /etc/cron.d/capture_host
+    rm -f /etc/logrotate.d/host-capture
+
+    # Ensure hosts file and state file exist
+    mkdir -p /etc/myvpn 2>/dev/null
+    touch /etc/myvpn/hosts.log 2>/dev/null
+    touch /etc/myvpn/.capture-state 2>/dev/null
+
+    # Apply nginx proxy_capture logging to existing xray.conf if not already there
+    if [ -f /etc/nginx/conf.d/xray.conf ]; then
+        if ! grep -q "proxy-capture.log" /etc/nginx/conf.d/xray.conf; then
+            echo -e "${YELLOW}[INFO]${NC} Adding proxy_capture logging to nginx..."
+            sed -i 's|root /home/vps/public_html;[[:space:]]*$|root /home/vps/public_html;\n             access_log /var/log/nginx/proxy-capture.log proxy_capture;|' \
+                /etc/nginx/conf.d/xray.conf 2>/dev/null
+            nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null && \
+                echo -e "${GREEN}[INFO]${NC} nginx reloaded with proxy_capture logging" || \
+                echo -e "${RED}[WARN]${NC} nginx reload failed; check config manually"
         fi
     fi
-    
-    # Ensure host-capture service is properly configured
-    if [ -f /etc/systemd/system/host-capture.service ]; then
-        systemctl daemon-reload
-        systemctl enable host-capture 2>/dev/null
-        if ! systemctl is-active --quiet host-capture; then
-            systemctl start host-capture 2>/dev/null
-            echo -e "${GREEN}[INFO]${NC} Started host-capture service"
-        else
-            systemctl restart host-capture 2>/dev/null
-            echo -e "${GREEN}[INFO]${NC} Restarted host-capture service"
-        fi
+
+    # Ensure host-capture service is running
+    systemctl daemon-reload
+    systemctl enable host-capture 2>/dev/null
+    if ! systemctl is-active --quiet host-capture 2>/dev/null; then
+        systemctl start host-capture 2>/dev/null
+        echo -e "${GREEN}[INFO]${NC} Started host-capture service"
+    else
+        systemctl restart host-capture 2>/dev/null
+        echo -e "${GREEN}[INFO]${NC} Restarted host-capture service"
     fi
     
     # Ensure xray-quota-monitor service is properly configured
     if [ -f /etc/systemd/system/xray-quota-monitor.service ]; then
         systemctl daemon-reload
         systemctl enable xray-quota-monitor 2>/dev/null
-        # Restart the service to apply any script changes
         systemctl restart xray-quota-monitor 2>/dev/null
         echo -e "${GREEN}[INFO]${NC} Restarted xray-quota-monitor service"
     fi
