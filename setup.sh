@@ -190,6 +190,7 @@ wget -q -O /usr/bin/cek-speed "https://raw.githubusercontent.com/LamonLind/Blue/
 wget -q -O /usr/bin/cek-ram "https://raw.githubusercontent.com/LamonLind/Blue/main/ram.sh"
 wget -q -O /usr/bin/limit-speed "https://raw.githubusercontent.com/LamonLind/Blue/main/limit-speed.sh"
 wget -q -O /usr/bin/realtime-hosts "https://raw.githubusercontent.com/LamonLind/Blue/main/realtime-hosts.sh"
+wget -q -O /usr/bin/vless-proxy-identifier "https://raw.githubusercontent.com/LamonLind/Blue/main/vless-proxy-identifier.sh"
 wget -q -O /usr/bin/menu-vless "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-vless.sh"
 wget -q -O /usr/bin/menu-vmess "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-vmess.sh"
 wget -q -O /usr/bin/menu-socks "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-socks.sh"
@@ -236,6 +237,7 @@ chmod +x /usr/bin/cek-speed
 chmod +x /usr/bin/cek-ram
 chmod +x /usr/bin/limit-speed
 chmod +x /usr/bin/realtime-hosts
+chmod +x /usr/bin/vless-proxy-identifier
 chmod +x /usr/bin/menu-vless
 chmod +x /usr/bin/menu-vmess
 chmod +x /usr/bin/menu-ss

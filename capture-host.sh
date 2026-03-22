@@ -409,6 +409,35 @@ capture_nginx_hosts() {
             if [ -n "$proxy_host" ] && echo "$proxy_host" | grep -q '[a-zA-Z]'; then
                 add_host "$proxy_host" "Proxy-Host" "$source_ip"
             fi
+            
+            # Extract proxy host IP from X-Forwarded-For chain.
+            # In a Client→ProxyHost→CDN→Origin chain, CDN appends ProxyHost IP
+            # to X-Forwarded-For. The last IP in the chain is the CDN entry point
+            # (i.e., the proxy host the client connected to).
+            local xff=$(echo "$line" | grep -oP 'XFF:"[^"]*"' | grep -oP '"[^"]*"' | tr -d '"')
+            if [ -z "$xff" ]; then
+                xff=$(echo "$line" | grep -oiP "X-Forwarded-For:\s*\K[^\s\"]+")
+            fi
+            if [ -n "$xff" ]; then
+                local proxy_ip
+                proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+                if echo "$proxy_ip" | grep -qP '^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'; then
+                    add_host "$proxy_ip" "Proxy-Host" "$source_ip"
+                fi
+            fi
+            
+            # Extract Vercel CDN proxy source (X-Vercel-Forwarded-For)
+            local vercel_xff=$(echo "$line" | grep -oP 'VercelFWD:"[^"]*"' | grep -oP '"[^"]*"' | tr -d '"')
+            if [ -z "$vercel_xff" ]; then
+                vercel_xff=$(echo "$line" | grep -oiP "X-Vercel-Forwarded-For:\s*\K[^\s\"]+")
+            fi
+            if [ -n "$vercel_xff" ]; then
+                local vercel_proxy_ip
+                vercel_proxy_ip=$(echo "$vercel_xff" | awk -F',' '{print $1}' | tr -d ' ')
+                if echo "$vercel_proxy_ip" | grep -qP '^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'; then
+                    add_host "$vercel_proxy_ip" "Vercel-Proxy" "$source_ip"
+                fi
+            fi
         done
     fi
     
@@ -452,6 +481,93 @@ capture_dropbear_hosts() {
     fi
 }
 
+# Capture proxy host IPs from CDN forwarding headers
+# When a client connects via: Client → Proxy Host → CDN → Origin,
+# the X-Forwarded-For header at the origin reveals the proxy host IP.
+# This function parses nginx proxy_capture log format to extract that IP.
+capture_cdn_proxy_hosts() {
+    local PROXY_CAPTURE_LOG="/var/log/nginx/proxy-capture.log"
+    local NGINX_LOG="/var/log/nginx/access.log"
+    local PROXY_HOSTS_FILE="/etc/myvpn/proxy-hosts.log"
+    mkdir -p /etc/myvpn 2>/dev/null
+    [ ! -f "$PROXY_HOSTS_FILE" ] && touch "$PROXY_HOSTS_FILE"
+
+    add_proxy_host_entry() {
+        local proxy_host="$1"
+        local source_type="$2"
+        local cdn_ip="$3"
+        local timestamp
+        timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+        [ -z "$proxy_host" ] && return
+        [ "$proxy_host" = "$VPS_IP" ] && return
+        [[ "$proxy_host" =~ ^(127\.|::1|localhost) ]] && return
+        if ! grep -q "^${proxy_host}|" "$PROXY_HOSTS_FILE" 2>/dev/null; then
+            echo "${proxy_host}|${source_type}|${cdn_ip:-N/A}|${timestamp}" >> "$PROXY_HOSTS_FILE"
+            add_host "$proxy_host" "$source_type" "$cdn_ip"
+        fi
+    }
+
+    # Parse dedicated proxy-capture log (written by nginx proxy_capture format)
+    if [ -f "$PROXY_CAPTURE_LOG" ]; then
+        tail -n 1000 "$PROXY_CAPTURE_LOG" 2>/dev/null | while IFS= read -r line; do
+            local cdn_ip
+            cdn_ip=$(echo "$line" | awk '{print $1}')
+
+            # Extract XFF chain from proxy_capture log format: XFF:"ip1, ip2"
+            local xff
+            xff=$(echo "$line" | grep -oP 'XFF:"[^"]*"' | grep -oP '"[^"]*"' | tr -d '"')
+            if [ -n "$xff" ]; then
+                # Last IP in XFF chain = proxy host (entry point the client connected to)
+                local proxy_ip
+                proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+                if echo "$proxy_ip" | grep -qP '^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'; then
+                    add_proxy_host_entry "$proxy_ip" "XFF-Proxy" "$cdn_ip"
+                fi
+            fi
+
+            # Vercel CDN: VercelFWD:"ip"
+            local vercel_fwd
+            vercel_fwd=$(echo "$line" | grep -oP 'VercelFWD:"[^"]*"' | grep -oP '"[^"]*"' | tr -d '"')
+            if [ -n "$vercel_fwd" ] && [ "$vercel_fwd" != "-" ]; then
+                local vercel_proxy
+                vercel_proxy=$(echo "$vercel_fwd" | awk -F',' '{print $1}' | tr -d ' ')
+                if echo "$vercel_proxy" | grep -qP '^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'; then
+                    add_proxy_host_entry "$vercel_proxy" "Vercel-Proxy" "$cdn_ip"
+                fi
+            fi
+
+            # Bunny CDN indicator: BunnyCDN field is non-empty
+            local bunny_field
+            bunny_field=$(echo "$line" | grep -oP 'BunnyCDN:"[^"]*"' | grep -oP '"[^"]*"' | tr -d '"')
+            if [ -n "$bunny_field" ] && [ "$bunny_field" != "-" ] && [ -n "$xff" ]; then
+                local bunny_proxy
+                bunny_proxy=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+                if echo "$bunny_proxy" | grep -qP '^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'; then
+                    add_proxy_host_entry "$bunny_proxy" "Bunny-Proxy" "$cdn_ip"
+                fi
+            fi
+        done
+    fi
+
+    # Also parse standard nginx access log for XFF headers if proxy_capture log
+    # is not yet configured (uses common nginx combined log format fallback)
+    if [ -f "$NGINX_LOG" ]; then
+        tail -n 500 "$NGINX_LOG" 2>/dev/null | while IFS= read -r line; do
+            local cdn_ip
+            cdn_ip=$(echo "$line" | awk '{print $1}')
+            # Look for XFF in proxy_capture format embedded in standard log
+            local xff
+            xff=$(echo "$line" | grep -oP 'XFF:"[^"]*"' | grep -oP '"[^"]*"' | tr -d '"')
+            [ -z "$xff" ] && continue
+            local proxy_ip
+            proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+            if echo "$proxy_ip" | grep -qP '^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'; then
+                add_proxy_host_entry "$proxy_ip" "XFF-Proxy" "$cdn_ip"
+            fi
+        done
+    fi
+}
+
 # Main execution
 echo -e "${INFO} Scanning for request hosts..."
 echo -e "${INFO} Main Domain: $MAIN_DOMAIN"
@@ -462,6 +578,7 @@ capture_ssh_hosts
 capture_xray_hosts
 capture_nginx_hosts
 capture_dropbear_hosts
+capture_cdn_proxy_hosts
 
 echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 echo -e "${OKEY} Host capture complete!"

@@ -364,6 +364,7 @@ echo -e "     ${BICyan}[${BIWhite}5${BICyan}] Clear All Hosts     "
 echo -e "     ${BICyan}[${BIWhite}6${BICyan}] Turn ON Auto Capture     "
 echo -e "     ${BICyan}[${BIWhite}7${BICyan}] Turn OFF Auto Capture     "
 echo -e "     ${BICyan}[${BIWhite}8${BICyan}] ${BIGreen}Real-time Host Monitor (2s data, 0.1s display)${NC}"
+echo -e "     ${BICyan}[${BIWhite}9${BICyan}] ${BIYellow}VLESS Proxy Host Identifier (CDN/Bunny/Vercel)${NC}"
 echo -e " ${BICyan}└─────────────────────────────────────────────────────┘${NC}"
 echo -e "     ${BIYellow}Press x or [ Ctrl+C ] • To-${BIWhite}Exit${NC}"
 echo ""
@@ -383,6 +384,15 @@ case $opt in
         /usr/bin/realtime-hosts
     else
         echo -e "${RED}Real-time host monitor not installed${NC}"
+        sleep 2
+    fi
+    ;;
+9)
+    # Launch VLESS proxy host identifier
+    if [ -f "/usr/bin/vless-proxy-identifier" ]; then
+        /usr/bin/vless-proxy-identifier
+    else
+        echo -e "${RED}VLESS proxy host identifier not installed${NC}"
         sleep 2
     fi
     ;;
