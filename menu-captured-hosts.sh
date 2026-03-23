@@ -86,12 +86,14 @@ display_hosts() {
                 Host-Header) color="$BIYellow" ;;
                 SNI)         color="$BICyan"   ;;
                 Xray-Dest)   color="$BIGreen"  ;;
+                Proxy-Host)  color="$BIWhite"  ;;
+                Target-Addr) color="$BIRed"    ;;
                 *)           continue           ;;
             esac
             printf " ${color}%-28s${NC}  ${BIWhite}%-12s${NC}  %-20s  ${BICyan}%s${NC}\n" \
                 "$host" "$type" "${source_ip:0:20}" "$timestamp"
             ((runtime_count++))
-        done < <(grep -E '\|(Host-Header|SNI|Xray-Dest)\|' "$HOSTS_FILE" 2>/dev/null)
+        done < <(grep -E '\|(Host-Header|SNI|Xray-Dest|Proxy-Host|Target-Addr)\|' "$HOSTS_FILE" 2>/dev/null)
 
         [ "$runtime_count" -eq 0 ] && echo -e " ${BIYellow}  (none yet — clients connect to start capturing)${NC}"
 
@@ -211,6 +213,8 @@ show_menu() {
     echo -e " ${BIGreen} Host-Header${NC} = HTTP Host header from client connection"
     echo -e " ${BICyan} SNI${NC}         = TLS Server Name Indication from handshake"
     echo -e " ${BIGreen} Xray-Dest${NC}  = destination accessed via VPN tunnel"
+    echo -e " ${BIWhite} Proxy-Host${NC} = reverse proxy destination host (nginx \$proxy_host)"
+    echo -e " ${BIRed} Target-Addr${NC} = upstream target address (nginx \$upstream_addr)"
     echo -e ""
     echo -e " ${BICyan}Capture Service: ${NC}$(service_status)"
     echo -e ""

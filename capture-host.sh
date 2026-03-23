@@ -115,16 +115,22 @@ parse_nginx_proxy_capture() {
 
     # Process only new lines
     tail -n "$new_lines" "$NGINX_CAPTURE_LOG" 2>/dev/null | while IFS= read -r line; do
-        local source_ip host sni
+        local source_ip host sni proxy_host upstream_addr
         source_ip=$(echo "$line" | awk '{print $1}')
 
         # Extract Host:"..." field
         host=$(echo "$line" | grep -oE 'Host:"[^"]*"' | head -1 | cut -d'"' -f2)
         # Extract SNI:"..." field
         sni=$(echo "$line" | grep -oE 'SNI:"[^"]*"' | head -1 | cut -d'"' -f2)
+        # Extract ProxyHost:"..." field (nginx $proxy_host — reverse proxy destination host)
+        proxy_host=$(echo "$line" | grep -oE 'ProxyHost:"[^"]*"' | head -1 | cut -d'"' -f2)
+        # Extract UpstreamAddr:"..." field (nginx $upstream_addr — actual target address)
+        upstream_addr=$(echo "$line" | grep -oE 'UpstreamAddr:"[^"]*"' | head -1 | cut -d'"' -f2)
 
-        [ -n "$host" ] && [ "$host" != "-" ] && add_host "$host" "Host-Header" "$source_ip"
-        [ -n "$sni" ]  && [ "$sni"  != "-" ] && add_host "$sni"  "SNI"         "$source_ip"
+        [ -n "$host" ]         && [ "$host"         != "-" ] && add_host "$host"         "Host-Header" "$source_ip"
+        [ -n "$sni" ]          && [ "$sni"          != "-" ] && add_host "$sni"          "SNI"         "$source_ip"
+        [ -n "$proxy_host" ]   && [ "$proxy_host"   != "-" ] && add_host "$proxy_host"   "Proxy-Host"  "$source_ip"
+        [ -n "$upstream_addr" ] && [ "$upstream_addr" != "-" ] && add_host "$upstream_addr" "Target-Addr" "$source_ip"
     done
 
     # Update state
