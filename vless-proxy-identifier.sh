@@ -54,6 +54,7 @@ PROXY_HOSTS_FILE="/etc/myvpn/proxy-hosts.log"
 HOSTS_FILE="/etc/myvpn/hosts.log"
 XRAY_LOG="/var/log/xray/access.log"
 NGINX_LOG="/var/log/nginx/access.log"
+NGINX_PROXY_CAPTURE_LOG="/var/log/nginx/proxy-capture.log"   # structured CDN header log
 NGINX_ERROR_LOG="/var/log/nginx/error.log"
 
 mkdir -p /etc/myvpn 2>/dev/null
@@ -98,27 +99,31 @@ add_proxy_host() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# 1. Parse X-Forwarded-For chains from Nginx access log
+# 1. Parse X-Forwarded-For chains from Nginx logs
 #
 # When the chain is: Client → Proxy Host → CDN → Origin,
 # the CDN appends "Proxy Host IP" to X-Forwarded-For.
-# Nginx log format must include "$http_x_forwarded_for".
-# The SECOND-TO-LAST (or last before CDN adds its own) entry
-# is the proxy host IP.
+# The proxy-capture log records XFF:"..." directly; the standard
+# access log records it as a quoted comma-separated string.
+# The LAST entry in XFF is the proxy host IP used by the client.
 # ─────────────────────────────────────────────────────────────
 parse_xforwardedfor_chain() {
-    echo -e "${INFO} Scanning X-Forwarded-For chains in Nginx access log..."
-    [ ! -f "$NGINX_LOG" ] && return
+    echo -e "${INFO} Scanning X-Forwarded-For chains in Nginx logs..."
 
-    tail -n 2000 "$NGINX_LOG" 2>/dev/null | while IFS= read -r line; do
+    # Prefer the structured proxy-capture log; fall back to standard access log
+    local scan_log="$NGINX_PROXY_CAPTURE_LOG"
+    [ ! -f "$scan_log" ] && scan_log="$NGINX_LOG"
+    [ ! -f "$scan_log" ] && return
+
+    tail -n 2000 "$scan_log" 2>/dev/null | while IFS= read -r line; do
         # Extract the CDN node IP (first field in default nginx log)
         local cdn_ip
         cdn_ip=$(echo "$line" | awk '{print $1}')
 
-        # Extract X-Forwarded-For header value from the log line.
-        # Assumes the nginx log format includes the header (e.g. via $http_x_forwarded_for).
+        # Extract XFF from proxy-capture format (XFF:"...") or standard log ("ip1, ip2")
         local xff
-        xff=$(echo "$line" | grep -oP '"[^"]*,[^"]*"' | head -1 | tr -d '"')
+        xff=$(echo "$line" | grep -oE 'XFF:"[^"]*"' | head -1 | cut -d'"' -f2)
+        [ -z "$xff" ] && xff=$(echo "$line" | grep -oP '"[^"]*,[^"]*"' | head -1 | tr -d '"')
         [ -z "$xff" ] && xff=$(echo "$line" | grep -oP 'XFF:\s*\K[^\s"]+' | head -1)
         [ -z "$xff" ] && continue
 
@@ -139,22 +144,38 @@ parse_xforwardedfor_chain() {
 
 # ─────────────────────────────────────────────────────────────
 # 2. Parse Bunny CDN forwarding headers
-#    Bunny CDN passes: X-Forwarded-For, X-Real-Ip, Cdn-Requestcountrycode
-#    The real upstream (proxy host) IP appears in X-Forwarded-For.
+#    Bunny CDN passes Cdn-Requestcountrycode, X-Forwarded-For.
+#    The proxy-capture log stores this as BunnyCDN:"<country>".
+#    A non-empty BunnyCDN field confirms Bunny CDN traffic; the
+#    real upstream (proxy host) IP appears in the XFF chain.
 # ─────────────────────────────────────────────────────────────
 parse_bunny_cdn_headers() {
     echo -e "${INFO} Scanning Bunny CDN headers..."
-    [ ! -f "$NGINX_LOG" ] && return
 
-    tail -n 2000 "$NGINX_LOG" 2>/dev/null | while IFS= read -r line; do
+    local scan_log="$NGINX_PROXY_CAPTURE_LOG"
+    [ ! -f "$scan_log" ] && scan_log="$NGINX_LOG"
+    [ ! -f "$scan_log" ] && return
+
+    tail -n 2000 "$scan_log" 2>/dev/null | while IFS= read -r line; do
         local cdn_ip
         cdn_ip=$(echo "$line" | awk '{print $1}')
 
-        # Bunny CDN header: Cdn-Requestcountrycode (indicates Bunny CDN traffic)
-        echo "$line" | grep -qi "Cdn-Request\|bunny\|b-cdn" || continue
+        # proxy-capture format: BunnyCDN:"XX" where XX is a non-empty country code
+        local bunny_val
+        bunny_val=$(echo "$line" | grep -oE 'BunnyCDN:"[^"]*"' | head -1 | cut -d'"' -f2)
+        [ "$bunny_val" = "-" ] && bunny_val=""
+        if [ -z "$bunny_val" ]; then
+            # Fallback: look for Bunny indicators in standard log
+            echo "$line" | grep -qi "Cdn-Request\|bunny\|b-cdn" || continue
+        fi
 
-        local proxy_ip
-        proxy_ip=$(echo "$line" | grep -oP 'X-Forwarded-For:\s*\K[^\s,]+' | head -1)
+        local proxy_ip xff
+        xff=$(echo "$line" | grep -oE 'XFF:"[^"]*"' | head -1 | cut -d'"' -f2)
+        [ -z "$xff" ] && xff=$(echo "$line" | grep -oP 'X-Forwarded-For:\s*\K[^\s,]+' | head -1)
+
+        if [ -n "$xff" ] && [ "$xff" != "-" ]; then
+            proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+        fi
         [ -z "$proxy_ip" ] && proxy_ip=$(echo "$line" | grep -oP '"([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1 | tr -d '"')
         [ -z "$proxy_ip" ] && continue
 
@@ -166,20 +187,37 @@ parse_bunny_cdn_headers() {
 
 # ─────────────────────────────────────────────────────────────
 # 3. Parse Vercel CDN forwarding headers
-#    Vercel passes: X-Vercel-Forwarded-For, X-Forwarded-For
+#    Vercel passes: X-Vercel-Forwarded-For, X-Forwarded-For.
+#    The proxy-capture log stores this as VercelFWD:"<ip>".
+#    A non-empty VercelFWD field confirms Vercel CDN traffic.
 # ─────────────────────────────────────────────────────────────
 parse_vercel_cdn_headers() {
     echo -e "${INFO} Scanning Vercel CDN headers..."
-    [ ! -f "$NGINX_LOG" ] && return
 
-    tail -n 2000 "$NGINX_LOG" 2>/dev/null | while IFS= read -r line; do
+    local scan_log="$NGINX_PROXY_CAPTURE_LOG"
+    [ ! -f "$scan_log" ] && scan_log="$NGINX_LOG"
+    [ ! -f "$scan_log" ] && return
+
+    tail -n 2000 "$scan_log" 2>/dev/null | while IFS= read -r line; do
         local cdn_ip
         cdn_ip=$(echo "$line" | awk '{print $1}')
 
-        echo "$line" | grep -qi "vercel\|x-vercel" || continue
+        # proxy-capture format: VercelFWD:"<client_ip>" — non-empty = Vercel traffic
+        local vercel_val
+        vercel_val=$(echo "$line" | grep -oE 'VercelFWD:"[^"]*"' | head -1 | cut -d'"' -f2)
+        [ "$vercel_val" = "-" ] && vercel_val=""
+        if [ -z "$vercel_val" ]; then
+            # Fallback: look for Vercel indicators in standard log
+            echo "$line" | grep -qi "vercel\|x-vercel" || continue
+        fi
 
-        local proxy_ip
-        proxy_ip=$(echo "$line" | grep -oP 'X-Vercel-Forwarded-For:\s*\K[^\s,]+' | head -1)
+        local proxy_ip xff
+        xff=$(echo "$line" | grep -oE 'XFF:"[^"]*"' | head -1 | cut -d'"' -f2)
+
+        if [ -n "$xff" ] && [ "$xff" != "-" ]; then
+            proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+        fi
+        [ -z "$proxy_ip" ] && proxy_ip=$(echo "$line" | grep -oP 'X-Vercel-Forwarded-For:\s*\K[^\s,]+' | head -1)
         [ -z "$proxy_ip" ] && proxy_ip=$(echo "$line" | grep -oP 'X-Forwarded-For:\s*\K[^\s,]+' | head -1)
         [ -z "$proxy_ip" ] && continue
 
@@ -190,7 +228,140 @@ parse_vercel_cdn_headers() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# 4. Parse Xray access log for VLESS connection metadata
+# 4. Parse Cloudflare CDN forwarding headers
+#    Cloudflare passes CF-Connecting-IP and CF-Ray.
+#    The proxy-capture log stores these as CFConnecting:"<ip>"
+#    and CFRay:"<ray-id>".  A non-empty CFRay or CFConnecting
+#    confirms Cloudflare traffic; the $remote_addr is the CF
+#    edge node IP (the CDN entry point used by the client).
+# ─────────────────────────────────────────────────────────────
+parse_cloudflare_cdn_headers() {
+    echo -e "${INFO} Scanning Cloudflare CDN headers..."
+
+    local scan_log="$NGINX_PROXY_CAPTURE_LOG"
+    [ ! -f "$scan_log" ] && scan_log="$NGINX_LOG"
+    [ ! -f "$scan_log" ] && return
+
+    tail -n 2000 "$scan_log" 2>/dev/null | while IFS= read -r line; do
+        local cdn_ip
+        cdn_ip=$(echo "$line" | awk '{print $1}')
+
+        # proxy-capture format: CFConnecting:"<real_client_ip>" and CFRay:"<id>"
+        local cf_connecting cf_ray
+        cf_connecting=$(echo "$line" | grep -oE 'CFConnecting:"[^"]*"' | head -1 | cut -d'"' -f2)
+        [ "$cf_connecting" = "-" ] && cf_connecting=""
+        cf_ray=$(echo "$line"        | grep -oE 'CFRay:"[^"]*"'        | head -1 | cut -d'"' -f2)
+        [ "$cf_ray" = "-" ] && cf_ray=""
+
+        # If neither CF header is present, skip
+        [ -z "$cf_connecting" ] && [ -z "$cf_ray" ] && continue
+
+        # The cdn_ip ($remote_addr) is the Cloudflare edge node IP.
+        # It is the proxy host the client routed through to reach the origin.
+        if echo "$cdn_ip" | grep -qP "${IPV4_PATTERN}"; then
+            add_proxy_host "$cdn_ip" "Cloudflare-Edge" "${cf_connecting:-N/A}"
+        fi
+
+        # Also check XFF for intermediate hops
+        local xff proxy_ip
+        xff=$(echo "$line" | grep -oE 'XFF:"[^"]*"' | head -1 | cut -d'"' -f2)
+        if [ -n "$xff" ] && [ "$xff" != "-" ]; then
+            proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+            if [ -n "$proxy_ip" ] && [ "$proxy_ip" != "$cdn_ip" ] && \
+               echo "$proxy_ip" | grep -qP "${IPV4_PATTERN}"; then
+                add_proxy_host "$proxy_ip" "CF-XFF-Proxy" "$cdn_ip"
+            fi
+        fi
+    done
+}
+
+# ─────────────────────────────────────────────────────────────
+# 5. Parse Netlify CDN forwarding headers
+#    Netlify passes X-NF-Client-Connection-IP (real client IP).
+#    The proxy-capture log stores this as NFClient:"<ip>".
+#    A non-empty NFClient field confirms Netlify CDN traffic;
+#    the $remote_addr is the Netlify edge node used by the client.
+# ─────────────────────────────────────────────────────────────
+parse_netlify_cdn_headers() {
+    echo -e "${INFO} Scanning Netlify CDN headers..."
+
+    local scan_log="$NGINX_PROXY_CAPTURE_LOG"
+    [ ! -f "$scan_log" ] && scan_log="$NGINX_LOG"
+    [ ! -f "$scan_log" ] && return
+
+    tail -n 2000 "$scan_log" 2>/dev/null | while IFS= read -r line; do
+        local cdn_ip
+        cdn_ip=$(echo "$line" | awk '{print $1}')
+
+        # proxy-capture format: NFClient:"<real_client_ip>"
+        local nf_client
+        nf_client=$(echo "$line" | grep -oE 'NFClient:"[^"]*"' | head -1 | cut -d'"' -f2)
+        [ "$nf_client" = "-" ] && nf_client=""
+        if [ -z "$nf_client" ]; then
+            # Fallback: look for Netlify indicators in standard log
+            echo "$line" | grep -qi "netlify\|x-nf-client" || continue
+            nf_client=$(echo "$line" | grep -oP 'X-NF-Client-Connection-IP:\s*\K[^\s,]+' | head -1)
+        fi
+        [ -z "$nf_client" ] && continue
+
+        # The cdn_ip is the Netlify edge node; also extract proxy from XFF chain
+        local proxy_ip xff
+        xff=$(echo "$line" | grep -oE 'XFF:"[^"]*"' | head -1 | cut -d'"' -f2)
+        if [ -n "$xff" ] && [ "$xff" != "-" ]; then
+            proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+        fi
+        [ -z "$proxy_ip" ] && proxy_ip="$cdn_ip"
+
+        if echo "$proxy_ip" | grep -qP "${IPV4_PATTERN}"; then
+            add_proxy_host "$proxy_ip" "Netlify-CDN" "${nf_client:-N/A}"
+        fi
+    done
+}
+
+# ─────────────────────────────────────────────────────────────
+# 6. Parse Render CDN forwarding headers
+#    Render passes Render-Forwarding-IP (original client IP).
+#    The proxy-capture log stores this as RenderFWD:"<ip>".
+#    A non-empty RenderFWD field confirms Render traffic;
+#    the $remote_addr is the Render edge node used by the client.
+# ─────────────────────────────────────────────────────────────
+parse_render_cdn_headers() {
+    echo -e "${INFO} Scanning Render CDN headers..."
+
+    local scan_log="$NGINX_PROXY_CAPTURE_LOG"
+    [ ! -f "$scan_log" ] && scan_log="$NGINX_LOG"
+    [ ! -f "$scan_log" ] && return
+
+    tail -n 2000 "$scan_log" 2>/dev/null | while IFS= read -r line; do
+        local cdn_ip
+        cdn_ip=$(echo "$line" | awk '{print $1}')
+
+        # proxy-capture format: RenderFWD:"<real_client_ip>"
+        local render_fwd
+        render_fwd=$(echo "$line" | grep -oE 'RenderFWD:"[^"]*"' | head -1 | cut -d'"' -f2)
+        [ "$render_fwd" = "-" ] && render_fwd=""
+        if [ -z "$render_fwd" ]; then
+            # Fallback: look for Render indicators in standard log
+            echo "$line" | grep -qi "render\|render-forwarding" || continue
+            render_fwd=$(echo "$line" | grep -oP 'Render-Forwarding-IP:\s*\K[^\s,]+' | head -1)
+        fi
+        [ -z "$render_fwd" ] && continue
+
+        local proxy_ip xff
+        xff=$(echo "$line" | grep -oE 'XFF:"[^"]*"' | head -1 | cut -d'"' -f2)
+        if [ -n "$xff" ] && [ "$xff" != "-" ]; then
+            proxy_ip=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+        fi
+        [ -z "$proxy_ip" ] && proxy_ip="$cdn_ip"
+
+        if echo "$proxy_ip" | grep -qP "${IPV4_PATTERN}"; then
+            add_proxy_host "$proxy_ip" "Render-CDN" "${render_fwd:-N/A}"
+        fi
+    done
+}
+
+# ─────────────────────────────────────────────────────────────
+# (renumbered) Parse Xray access log for VLESS connection metadata
 #    Xray logs VLESS inbound connections with destination and email.
 #    The "accepted" line shows where the connection is being forwarded.
 #    Combined with X-Forwarded-For, we can reconstruct the proxy hop.
@@ -276,7 +447,7 @@ display_proxy_hosts() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# 6. Run full proxy host scan
+# Run full proxy host scan (all CDN providers + Xray log)
 # ─────────────────────────────────────────────────────────────
 run_scan() {
     clear
@@ -285,8 +456,11 @@ run_scan() {
     echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
     echo ""
     parse_xforwardedfor_chain
+    parse_cloudflare_cdn_headers
     parse_bunny_cdn_headers
     parse_vercel_cdn_headers
+    parse_netlify_cdn_headers
+    parse_render_cdn_headers
     parse_xray_vless_log
     echo ""
     echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
@@ -355,16 +529,22 @@ show_nginx_config() {
 # Log format that captures CDN forwarding headers to identify proxy hosts.
 # X-Forwarded-For reveals the client's path: ClientIP, ProxyHostIP (→ CDN → Origin).
 # The last IP in the XFF chain is the proxy host IP used by the client.
+# XFwdHost carries the original Host header forwarded by CDN even when SNI is absent.
 log_format proxy_capture
     '$remote_addr [$time_local] "$request" $status '
     'XFF:"$http_x_forwarded_for" '
     'RealIP:"$http_x_real_ip" '
     'Host:"$http_host" '
     'SNI:"$ssl_server_name" '
-    'UA:"$http_user_agent" '
+    'ProxyHost:"$proxy_host" '
+    'UpstreamAddr:"$upstream_addr" '
+    'XFwdHost:"$http_x_forwarded_host" '
     'BunnyCDN:"$http_cdn_requestcountrycode" '
     'VercelFWD:"$http_x_vercel_forwarded_for" '
-    'CFConnecting:"$http_cf_connecting_ip"';
+    'CFConnecting:"$http_cf_connecting_ip" '
+    'CFRay:"$http_cf_ray" '
+    'NFClient:"$http_x_nf_client_connection_ip" '
+    'RenderFWD:"$http_render_forwarding_ip"';
 
 # Apply this log format to your server block:
 # access_log /var/log/nginx/proxy-capture.log proxy_capture;
@@ -401,9 +581,15 @@ apply_nginx_config() {
         '"'"'RealIP:"$http_x_real_ip" '"'"'
         '"'"'Host:"$http_host" '"'"'
         '"'"'SNI:"$ssl_server_name" '"'"'
+        '"'"'ProxyHost:"$proxy_host" '"'"'
+        '"'"'UpstreamAddr:"$upstream_addr" '"'"'
+        '"'"'XFwdHost:"$http_x_forwarded_host" '"'"'
         '"'"'BunnyCDN:"$http_cdn_requestcountrycode" '"'"'
         '"'"'VercelFWD:"$http_x_vercel_forwarded_for" '"'"'
-        '"'"'CFConnecting:"$http_cf_connecting_ip"'"'"';'
+        '"'"'CFConnecting:"$http_cf_connecting_ip" '"'"'
+        '"'"'CFRay:"$http_cf_ray" '"'"'
+        '"'"'NFClient:"$http_x_nf_client_connection_ip" '"'"'
+        '"'"'RenderFWD:"$http_render_forwarding_ip"'"'"';'
 
     # Use awk to insert before the last closing brace of http block
     cp "$NGINX_CONF" /tmp/nginx_proxy.conf.bak

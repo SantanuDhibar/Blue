@@ -63,6 +63,8 @@ is_valid_host() {
     case "$h" in
         127.0.0.1|localhost|0.0.0.0|"::1") return 1 ;;
     esac
+    # Not RFC-1918 private ranges (internal addresses are never CDN proxy hosts)
+    echo "$h" | grep -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' && return 1
     return 0
 }
 
@@ -127,10 +129,57 @@ parse_nginx_proxy_capture() {
         # Extract UpstreamAddr:"..." field (nginx $upstream_addr — actual target address)
         upstream_addr=$(echo "$line" | grep -oE 'UpstreamAddr:"[^"]*"' | head -1 | cut -d'"' -f2)
 
+        # ── CDN-specific header fields ──────────────────────────────────────────
+        # These are logged by the proxy_capture format and reveal the true client
+        # proxy path when traffic arrives via Cloudflare, Vercel, Netlify, Render,
+        # Bunny CDN, etc.  Nginx only sees the CDN's IP as $remote_addr and often
+        # cannot populate $ssl_server_name (SNI) because the CDN terminates TLS.
+        local xff xfwd_host cf_connecting cf_ray vercel_fwd nf_client render_fwd
+        xff=$(echo "$line"         | grep -oE 'XFF:"[^"]*"'         | head -1 | cut -d'"' -f2)
+        xfwd_host=$(echo "$line"   | grep -oE 'XFwdHost:"[^"]*"'    | head -1 | cut -d'"' -f2)
+        cf_connecting=$(echo "$line" | grep -oE 'CFConnecting:"[^"]*"' | head -1 | cut -d'"' -f2)
+        cf_ray=$(echo "$line"      | grep -oE 'CFRay:"[^"]*"'       | head -1 | cut -d'"' -f2)
+        vercel_fwd=$(echo "$line"  | grep -oE 'VercelFWD:"[^"]*"'   | head -1 | cut -d'"' -f2)
+        nf_client=$(echo "$line"   | grep -oE 'NFClient:"[^"]*"'    | head -1 | cut -d'"' -f2)
+        render_fwd=$(echo "$line"  | grep -oE 'RenderFWD:"[^"]*"'   | head -1 | cut -d'"' -f2)
+
+        # SNI fallback: CDNs terminate TLS before forwarding to origin, so
+        # $ssl_server_name is often "-".  Use X-Forwarded-Host (the hostname the
+        # CDN received from the client) or the Host header as the SNI value.
+        if [ -z "$sni" ] || [ "$sni" = "-" ]; then
+            if [ -n "$xfwd_host" ] && [ "$xfwd_host" != "-" ]; then
+                sni="$xfwd_host"
+            elif [ -n "$host" ] && [ "$host" != "-" ]; then
+                sni="$host"
+            fi
+        fi
+
+        # CDN proxy host from X-Forwarded-For chain.
+        # Connection chain: Client → ProxyHost → CDN → Origin
+        # The CDN appends the last-hop IP to XFF, so the final entry is the
+        # proxy host IP the client connected through to reach the CDN.
+        if [ -n "$xff" ] && [ "$xff" != "-" ]; then
+            local xff_last
+            xff_last=$(echo "$xff" | awk -F',' '{print $NF}' | tr -d ' ')
+            [ -n "$xff_last" ] && [ "$xff_last" != "-" ] && add_host "$xff_last" "CDN-Proxy" "$source_ip"
+        fi
+
+        # Add all the standard fields
         [ -n "$host" ]         && [ "$host"         != "-" ] && add_host "$host"         "Host-Header" "$source_ip"
         [ -n "$sni" ]          && [ "$sni"          != "-" ] && add_host "$sni"          "SNI"         "$source_ip"
         [ -n "$proxy_host" ]   && [ "$proxy_host"   != "-" ] && add_host "$proxy_host"   "Proxy-Host"  "$source_ip"
         [ -n "$upstream_addr" ] && [ "$upstream_addr" != "-" ] && add_host "$upstream_addr" "Target-Addr" "$source_ip"
+
+        # X-Forwarded-Host: the hostname the CDN received from the client — this is
+        # the real "reverse proxy host" used by the client in CDN-based setups.
+        [ -n "$xfwd_host" ]    && [ "$xfwd_host"    != "-" ] && add_host "$xfwd_host"    "Fwd-Host"    "$source_ip"
+
+        # CDN-reported real client IPs / indicators — useful for correlation.
+        # Note: these are IPs, not hostnames; is_valid_host will accept public IPs.
+        [ -n "$cf_connecting" ] && [ "$cf_connecting" != "-" ] && add_host "$cf_connecting" "CF-Client"     "$source_ip"
+        [ -n "$vercel_fwd" ]    && [ "$vercel_fwd"    != "-" ] && add_host "$vercel_fwd"    "Vercel-Client" "$source_ip"
+        [ -n "$nf_client" ]     && [ "$nf_client"     != "-" ] && add_host "$nf_client"     "NF-Client"     "$source_ip"
+        [ -n "$render_fwd" ]    && [ "$render_fwd"    != "-" ] && add_host "$render_fwd"    "Render-Client" "$source_ip"
     done
 
     # Update state

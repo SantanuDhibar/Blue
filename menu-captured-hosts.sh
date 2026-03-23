@@ -83,17 +83,23 @@ display_hosts() {
         while IFS='|' read -r host type source_ip timestamp; do
             local color
             case "$type" in
-                Host-Header) color="$BIYellow" ;;
-                SNI)         color="$BICyan"   ;;
-                Xray-Dest)   color="$BIGreen"  ;;
-                Proxy-Host)  color="$BIWhite"  ;;
-                Target-Addr) color="$BIRed"    ;;
-                *)           continue           ;;
+                Host-Header)    color="$BIYellow" ;;
+                SNI)            color="$BICyan"   ;;
+                Xray-Dest)      color="$BIGreen"  ;;
+                Proxy-Host)     color="$BIWhite"  ;;
+                Target-Addr)    color="$BIRed"    ;;
+                CDN-Proxy)      color="$BIRed"    ;;
+                Fwd-Host)       color="$BIGreen"  ;;
+                CF-Client)      color="$BICyan"   ;;
+                Vercel-Client)  color="$BICyan"   ;;
+                NF-Client)      color="$BICyan"   ;;
+                Render-Client)  color="$BICyan"   ;;
+                *)              continue           ;;
             esac
-            printf " ${color}%-28s${NC}  ${BIWhite}%-12s${NC}  %-20s  ${BICyan}%s${NC}\n" \
+            printf " ${color}%-28s${NC}  ${BIWhite}%-14s${NC}  %-20s  ${BICyan}%s${NC}\n" \
                 "$host" "$type" "${source_ip:0:20}" "$timestamp"
             ((runtime_count++))
-        done < <(grep -E '\|(Host-Header|SNI|Xray-Dest|Proxy-Host|Target-Addr)\|' "$HOSTS_FILE" 2>/dev/null)
+        done < <(grep -E '\|(Host-Header|SNI|Xray-Dest|Proxy-Host|Target-Addr|CDN-Proxy|Fwd-Host|CF-Client|Vercel-Client|NF-Client|Render-Client)\|' "$HOSTS_FILE" 2>/dev/null)
 
         [ "$runtime_count" -eq 0 ] && echo -e " ${BIYellow}  (none yet — clients connect to start capturing)${NC}"
 
@@ -210,11 +216,14 @@ show_menu() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
     echo -e ""
     echo -e " ${BICyan}Captures hosts used by clients when connecting to VPN:${NC}"
-    echo -e " ${BIGreen} Host-Header${NC} = HTTP Host header from client connection"
-    echo -e " ${BICyan} SNI${NC}         = TLS Server Name Indication from handshake"
-    echo -e " ${BIGreen} Xray-Dest${NC}  = destination accessed via VPN tunnel"
-    echo -e " ${BIWhite} Proxy-Host${NC} = reverse proxy destination host (nginx \$proxy_host)"
-    echo -e " ${BIRed} Target-Addr${NC} = upstream target address (nginx \$upstream_addr)"
+    echo -e " ${BIGreen} Host-Header${NC}    = HTTP Host header from client connection"
+    echo -e " ${BICyan} SNI${NC}            = TLS Server Name Indication from handshake"
+    echo -e " ${BIGreen} Xray-Dest${NC}     = destination accessed via VPN tunnel"
+    echo -e " ${BIWhite} Proxy-Host${NC}    = reverse proxy destination host (nginx \$proxy_host)"
+    echo -e " ${BIRed} Target-Addr${NC}   = upstream target address (nginx \$upstream_addr)"
+    echo -e " ${BIRed} CDN-Proxy${NC}     = CDN entry-point IP (last hop in X-Forwarded-For chain)"
+    echo -e " ${BIGreen} Fwd-Host${NC}      = X-Forwarded-Host forwarded by CDN (reverse proxy host)"
+    echo -e " ${BICyan} CF/Vercel/NF/Render-Client${NC} = real client IP reported by CDN"
     echo -e ""
     echo -e " ${BICyan}Capture Service: ${NC}$(service_status)"
     echo -e ""
