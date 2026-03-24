@@ -252,6 +252,7 @@ echo -e "     ${BICyan}[${BIWhite}24${BICyan}] NETFLIX CHECKER ${BICyan}${BIYell
 echo -e "     ${BICyan}[${BIWhite}25${BICyan}] TENDANG ${BICyan}${BIYellow}${BICyan}${NC}"
 echo -e "     ${BICyan}[${BIWhite}26${BICyan}] SLOWDNS MENU ${BICyan}${BIYellow}${BICyan}${NC}"
 echo -e "     ${BICyan}[${BIWhite}27${BICyan}] HOST CAPTURE ${BICyan}${BIYellow}${BICyan}${NC}"
+echo -e "     ${BICyan}[${BIWhite}28${BICyan}] WILDCARD DOMAIN ${BICyan}${BIYellow}${BICyan}${NC}"
 echo -e "     ${BICyan}[${BIWhite}29${BICyan}] UPDATE SCRIPT ${BICyan}${BIYellow}${BICyan}${NC}"
 echo -e "     ${BICyan}[${BIWhite}30${BICyan}] UNINSTALL SCRIPT ${BICyan}${BIYellow}${BICyan}${NC}"
 #echo -e "     ${BICyan}[${BIWhite}25${BICyan}] DELETE XRAYS USER [${BIWhite} $xrays users ${BICyan}] ${BICyan}${BIYellow}${BICyan}${NC}"
@@ -298,6 +299,7 @@ case $opt in
 25) clear ; tendang ;;
 26) clear ; menu-slowdns ;;
 27) clear ; menu-captured-hosts ;;
+28) clear ; menu-wildcard ;;
 29) clear ; update ;;
 30) clear ; uninstall ;;
 55) clear ; wget -q -O /usr/bin/xraychanger "https://raw.githubusercontent.com/LamonLind/Xcore-custompath/main/xraychanger.sh" && chmod +x /usr/bin/xraychanger && xraychanger ;;

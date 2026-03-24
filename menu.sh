@@ -200,7 +200,7 @@ echo -e " ${BICyan}[${BIWhite}08${BICyan}]${RED} •${NC} ${CYAN}REBOOT         
 echo -e " ${BICyan}[${BIWhite}09${BICyan}]${RED} •${NC} ${CYAN}RESTART SERVICE $NC  ${BICyan}[${BIWhite}21${BICyan}]${RED} • ${NC}${CYAN}CLEAR LOG $NC"
 echo -e " ${BICyan}[${BIWhite}10${BICyan}]${RED} •${NC} ${CYAN}BACKUP MENU     $NC  ${BICyan}[${BIWhite}22${BICyan}]${RED} • ${NC}${CYAN}FIX MISSING POINTING $NC"
 echo -e " ${BICyan}[${BIWhite}11${BICyan}]${RED} •${NC} ${CYAN}ADD HOST        $NC  ${BICyan}[${BIWhite}26${BICyan}]${RED} • ${NC}${CYAN}SLOWDNS MENU $NC"
-echo -e " ${BICyan}[${BIWhite}27${BICyan}]${RED} •${NC} ${CYAN}HOST CAPTURE    $NC"
+echo -e " ${BICyan}[${BIWhite}27${BICyan}]${RED} •${NC} ${CYAN}HOST CAPTURE    $NC  ${BICyan}[${BIWhite}28${BICyan}]${RED} • ${NC}${CYAN}WILDCARD DOMAIN $NC"
 echo -e " ${BICyan}[${BIWhite} X ${BICyan}] TYPE X FOR EXIT ${BICyan}${BIYellow}${BICyan}${NC}"  
 echo -e " ${RED}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
@@ -235,6 +235,7 @@ case $opt in
 22) clear ; wget https://raw.githubusercontent.com/LamonLind/Blue/main/cf.sh && chmod +x cf.sh && ./cf.sh ;;
 26) clear ; menu-slowdns ;;
 27) clear ; menu-captured-hosts ;;
+28) clear ; menu-wildcard ;;
 
 0) clear ; menu ;;
 x) exit ;;
