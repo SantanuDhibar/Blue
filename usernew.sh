@@ -145,8 +145,8 @@ IP Address : $IP
 Host : $domen
 OpenSSH : $opensh
 Dropbear : $db
-SSH-WS : $portsshws
-SSH-SSL-WS : $wsssl
+SSH-WS : 80,8080,8880,2052,2082,2086,2095
+SSH-SSL-WS : 443,2053,2083,2087,2096,8443
 SSL/TLS : $ssl
 UDPGW : 7100-7300
 ====================================================================
