@@ -180,8 +180,8 @@ echo -e "IP Address : $IP" | tee -a /etc/log-create-user.log
 echo -e "Host : $domen" | tee -a /etc/log-create-user.log
 echo -e "OpenSSH : $opensh" | tee -a /etc/log-create-user.log
 echo -e "Dropbear : $db" | tee -a /etc/log-create-user.log
-echo -e "SSH-WS : $portsshws" | tee -a /etc/log-create-user.log
-echo -e "SSH-SSL-WS : $wsssl" | tee -a /etc/log-create-user.log
+echo -e "SSH-WS : 80,8080,8880,2052,2082,2086,2095" | tee -a /etc/log-create-user.log
+echo -e "SSH-SSL-WS : 443,2053,2083,2087,2096,8443" | tee -a /etc/log-create-user.log
 echo -e "SSL/TLS : $ssl" | tee -a /etc/log-create-user.log
 echo -e "UDPGW : 7100-7300" | tee -a /etc/log-create-user.log
 if [ "$slowdns_installed" = "true" ]; then
@@ -226,8 +226,8 @@ echo -e "IP Address : $IP" | tee -a /etc/log-create-user.log
 echo -e "Host : $domen" | tee -a /etc/log-create-user.log
 echo -e "OpenSSH : $opensh" | tee -a /etc/log-create-user.log
 echo -e "Dropbear : $db" | tee -a /etc/log-create-user.log
-echo -e "SSH-WS : $portsshws" | tee -a /etc/log-create-user.log
-echo -e "SSH-SSL-WS : $wsssl" | tee -a /etc/log-create-user.log
+echo -e "SSH-WS : 80,8080,8880,2052,2082,2086,2095" | tee -a /etc/log-create-user.log
+echo -e "SSH-SSL-WS : 443,2053,2083,2087,2096,8443" | tee -a /etc/log-create-user.log
 echo -e "SSL/TLS : $ssl" | tee -a /etc/log-create-user.log
 echo -e "UDPGW : 7100-7300" | tee -a /etc/log-create-user.log
 if [ "$slowdns_installed" = "true" ]; then
