@@ -212,7 +212,7 @@ update_all_scripts() {
         "cek-trafik" "cek-speed" "cek-ram" "limit-speed"
         "realtime-hosts" "reset-user-quota"
         "menu-vless" "menu-vmess" "menu-socks" "menu-ss" "menu-trojan"
-        "menu-trgo" "menu-ssh" "menu-slowdns" "menu-captured-hosts" "menu-bandwidth"
+        "menu-trgo" "menu-ssh" "menu-slowdns" "menu-captured-hosts" "menu-bandwidth" "menu-wildcard"
         "capture-host" "menu-bckp" "usernew" "menu" "wbm" "xp"
         "dns" "netf" "bbr" "backup" "restore"
         "xray-quota-manager" "xray-traffic-monitor"
@@ -299,6 +299,7 @@ update_component() {
         3)
             echo -e "${YELLOW}[INFO]${NC} Updating menu scripts..."
             wget -q -O /usr/bin/menu "https://${REPO_URL}/menu4.sh" && chmod +x /usr/bin/menu
+            wget -q -O /usr/bin/menu-wildcard "https://${REPO_URL}/menu-wildcard.sh" && chmod +x /usr/bin/menu-wildcard
             echo -e "${GREEN}[DONE]${NC} Menu scripts updated!"
             ;;
         4)
