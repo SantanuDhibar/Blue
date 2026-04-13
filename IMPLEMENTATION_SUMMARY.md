@@ -96,8 +96,8 @@ The quota system is automatically installed via `setup.sh`:
 
 ```bash
 # Downloads quota scripts
-wget -O /usr/bin/xray-quota-manager "https://raw.githubusercontent.com/LamonLind/Blue/main/xray-quota-manager"
-wget -O /usr/bin/xray-traffic-monitor "https://raw.githubusercontent.com/LamonLind/Blue/main/xray-traffic-monitor"
+wget -O /usr/bin/xray-quota-manager "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/xray-quota-manager"
+wget -O /usr/bin/xray-traffic-monitor "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/xray-traffic-monitor"
 
 # Sets permissions
 chmod +x /usr/bin/xray-quota-manager

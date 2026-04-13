@@ -91,9 +91,9 @@ The service is automatically installed and configured during system update:
 update
 
 # Or manually install
-wget -O /etc/systemd/system/host-capture.service https://raw.githubusercontent.com/LamonLind/Blue/main/host-capture.service
-wget -O /usr/local/bin/capture-host-daemon.sh https://raw.githubusercontent.com/LamonLind/Blue/main/capture-host-daemon.sh
-wget -O /usr/local/bin/capture-host.sh https://raw.githubusercontent.com/LamonLind/Blue/main/capture-host.sh
+wget -O /etc/systemd/system/host-capture.service https://raw.githubusercontent.com/SantanuDhibar/Blue/main/host-capture.service
+wget -O /usr/local/bin/capture-host-daemon.sh https://raw.githubusercontent.com/SantanuDhibar/Blue/main/capture-host-daemon.sh
+wget -O /usr/local/bin/capture-host.sh https://raw.githubusercontent.com/SantanuDhibar/Blue/main/capture-host.sh
 chmod +x /usr/local/bin/capture-host-daemon.sh
 chmod +x /usr/local/bin/capture-host.sh
 

@@ -1,6 +1,6 @@
 [Unit]
 Description=VPN Host Capture Service
-Documentation=https://github.com/LamonLind/Blue
+Documentation=https://github.com/SantanuDhibar/Blue
 After=network.target xray.service nginx.service
 
 [Service]

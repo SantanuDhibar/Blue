@@ -18,7 +18,7 @@
 #   - Existing nginx + xray/v2ray VPN server
 #
 # Usage:
-#   wget -qO install-host-capture.sh https://raw.githubusercontent.com/LamonLind/Blue/main/install-host-capture.sh
+#   wget -qO install-host-capture.sh https://raw.githubusercontent.com/SantanuDhibar/Blue/main/install-host-capture.sh
 #   chmod +x install-host-capture.sh && ./install-host-capture.sh
 # =========================================
 
@@ -32,7 +32,7 @@ export EROR="[${RED} EROR ${NC}]"
 export INFO="[${YELLOW} INFO ${NC}]"
 export OKEY="[${GREEN} OKEY ${NC}]"
 
-REPO_URL="raw.githubusercontent.com/LamonLind/Blue/main"
+REPO_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main"
 
 if [ "${EUID}" -ne 0 ]; then
     echo -e "${EROR} Please Run This Script As Root User !"

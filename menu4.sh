@@ -57,8 +57,8 @@ export WARNING="${RED}\e[5m"
 export UNDERLINE="\e[4m"
 
 # // Exporting URL Host
-export Server_URL="raw.githubusercontent.com/LamonLind/Blue/main/test"
-export Server1_URL="raw.githubusercontent.com/LamonLind/Blue/main/limit"
+export Server_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main/test"
+export Server1_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main/limit"
 export Server_Port="443"
 export Server_IP="underfined"
 export Script_Mode="Stable"
@@ -178,7 +178,7 @@ echo ""
 read -n 1 -s -r -p "Press any key to back on menu"
 menu
 }
-export sem=$( curl -s https://raw.githubusercontent.com/LamonLind/Blue/main/test/versions)
+export sem=$( curl -s https://raw.githubusercontent.com/SantanuDhibar/Blue/main/test/versions)
 export pak=$( cat /home/.ver)
 IPVPS=$(curl -s ipinfo.io/ip )
 IPVPS=$(curl -sS ipv4.icanhazip.com)
@@ -309,7 +309,7 @@ case $opt in
 99) clear ; restore ;;
 #88) clear ; wget https://raw.githubusercontent.com/LamonLind/Vergil/main2/addons/dns2.sh && chmod +x dns2.sh && ./dns2.sh ;;
 #99) clear ; wget https://raw.githubusercontent.com/LamonLind/Vergil/main/Tunnel/udp.sh && bash udp.sh ;;
-#22) clear ; wget https://raw.githubusercontent.com/LamonLind/Blue/main/cf.sh && chmod +x cf.sh && ./cf.sh ;;
+#22) clear ; wget https://raw.githubusercontent.com/SantanuDhibar/Blue/main/cf.sh && chmod +x cf.sh && ./cf.sh ;;
 #25) clear ; del-xrays ;;
 #30) clear ; user-xrays ;;
 0) clear ; menu ;;

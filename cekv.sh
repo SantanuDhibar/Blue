@@ -31,7 +31,7 @@ export BOLD="\e[1m"
 export WARNING="${RED}\e[5m"
 export UNDERLINE="\e[4m"
 
-export ver1=$( curl -s https://raw.githubusercontent.com/LamonLind/Blue/main/test/versions)
+export ver1=$( curl -s https://raw.githubusercontent.com/SantanuDhibar/Blue/main/test/versions)
 export ver2=$( cat /home/.ver)
 if [[ $ver1 == $ver2 ]]; then
         echo -e "${LIGHT} ${BOLD}Your Script Last Update ${NC}"

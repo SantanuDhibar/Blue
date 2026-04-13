@@ -219,11 +219,11 @@ menu
 update
 
 # Method 3: Manual update of specific components
-wget -O /usr/bin/xray-quota-manager "https://raw.githubusercontent.com/LamonLind/Blue/main/xray-quota-manager"
-wget -O /usr/bin/xray-traffic-monitor "https://raw.githubusercontent.com/LamonLind/Blue/main/xray-traffic-monitor"
-wget -O /usr/bin/menu-bandwidth "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-bandwidth.sh"
-wget -O /usr/bin/menu-captured-hosts "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-captured-hosts.sh"
-wget -O /usr/bin/menu "https://raw.githubusercontent.com/LamonLind/Blue/main/menu4.sh"
+wget -O /usr/bin/xray-quota-manager "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/xray-quota-manager"
+wget -O /usr/bin/xray-traffic-monitor "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/xray-traffic-monitor"
+wget -O /usr/bin/menu-bandwidth "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/menu-bandwidth.sh"
+wget -O /usr/bin/menu-captured-hosts "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/menu-captured-hosts.sh"
+wget -O /usr/bin/menu "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/menu4.sh"
 chmod +x /usr/bin/xray-quota-manager /usr/bin/xray-traffic-monitor /usr/bin/menu-bandwidth /usr/bin/menu-captured-hosts /usr/bin/menu
 
 # Restart services

@@ -1,6 +1,6 @@
 [Unit]
 Description=Xray Traffic Monitor & Quota Enforcer
-Documentation=https://github.com/LamonLind/Blue
+Documentation=https://github.com/SantanuDhibar/Blue
 After=network.target xray.service
 Wants=xray.service
 

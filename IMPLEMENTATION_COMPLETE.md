@@ -122,8 +122,8 @@ menu → 29 (Update Script)
 update
 
 # Method 3: Specific components
-wget -O /usr/bin/xray-quota-manager "https://raw.githubusercontent.com/LamonLind/Blue/main/xray-quota-manager"
-wget -O /usr/bin/menu-bandwidth "https://raw.githubusercontent.com/LamonLind/Blue/main/menu-bandwidth.sh"
+wget -O /usr/bin/xray-quota-manager "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/xray-quota-manager"
+wget -O /usr/bin/menu-bandwidth "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/menu-bandwidth.sh"
 chmod +x /usr/bin/xray-quota-manager /usr/bin/menu-bandwidth
 systemctl restart xray-quota-monitor
 ```
