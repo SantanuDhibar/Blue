@@ -7,6 +7,7 @@ XRAY_PATH="/vless"
 OUTPUT_DIR="./generated-tunnel"
 INPUT_FILE=""
 TIMEOUT=12
+INSECURE_TLS=0
 
 usage() {
     cat <<'EOF'
@@ -20,6 +21,7 @@ Options:
   --xray-port PORT   Xray VLESS WS port (default: 10000)
   --xray-path PATH   WebSocket path (default: /vless)
   --timeout SEC      Curl timeout in seconds (default: 12)
+  --insecure         Allow insecure TLS checks for header fetches
   --help             Show this help
 EOF
 }
@@ -43,6 +45,21 @@ extract_domain() {
     local host
     host=$(printf "%s" "$url" | sed -E 's#^https?://##; s#/.*$##; s#:[0-9]+$##')
     printf "%s\n" "$host"
+}
+
+valid_domain() {
+    local domain="$1"
+    [[ -n "$domain" ]] || return 1
+    [[ "$domain" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] || return 1
+}
+
+safe_origin_from_url() {
+    local url="$1"
+    local domain="$2"
+    local scheme
+    scheme=$(printf "%s" "$url" | sed -nE 's#^(https?)://.*#\1#p')
+    [[ -n "$scheme" ]] || scheme="https"
+    printf "%s://%s\n" "$scheme" "$domain"
 }
 
 is_nginx_like() {
@@ -88,6 +105,10 @@ while [[ $# -gt 0 ]]; do
             TIMEOUT="$2"
             shift 2
             ;;
+        --insecure)
+            INSECURE_TLS=1
+            shift
+            ;;
         --help|-h)
             usage
             exit 0
@@ -127,12 +148,17 @@ printf "url\tdomain\tstatus\tserver\tcontent_type\tnginx_or_openresty\n" > "$ANA
 declare -A DOMAIN_ORIGIN=()
 declare -A DOMAIN_SEEN=()
 
+declare -a CURL_TLS_FLAGS=()
+if (( INSECURE_TLS == 1 )); then
+    CURL_TLS_FLAGS+=("-k")
+fi
+
 for raw_url in "${URLS[@]}"; do
     url=$(ensure_url "$raw_url")
     domain=$(extract_domain "$url")
-    [[ -n "$domain" ]] || continue
+    valid_domain "$domain" || continue
 
-    headers=$(curl -k -sSIL --connect-timeout 5 --max-time "$TIMEOUT" "$url" 2>/dev/null || true)
+    headers=$(curl "${CURL_TLS_FLAGS[@]}" -sSIL --connect-timeout 5 --max-time "$TIMEOUT" "$url" 2>/dev/null || true)
     status=$(printf "%s\n" "$headers" | awk '/^HTTP\// { line=$0 } END { print line }' | tr -d '\r')
     server=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="server" { v=$2 } END { print v }' | tr -d '\r')
     content_type=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="content-type" { v=$2 } END { print v }' | tr -d '\r')
@@ -142,7 +168,7 @@ for raw_url in "${URLS[@]}"; do
         marker="yes"
         if [[ -z "${DOMAIN_SEEN[$domain]+x}" ]]; then
             DOMAIN_SEEN["$domain"]=1
-            DOMAIN_ORIGIN["$domain"]="$url"
+            DOMAIN_ORIGIN["$domain"]="$(safe_origin_from_url "$url" "$domain")"
             printf "%s\n" "$domain" >> "$AUTHORIZED_FILE"
         fi
     fi

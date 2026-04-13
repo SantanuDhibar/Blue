@@ -119,15 +119,15 @@ apt --fix-missing update && apt update && apt upgrade -y && apt install -y bzip2
 Generate an authorized reverse-proxy tunnel setup for Xray (VLESS + WebSocket) by scanning URL response headers and selecting only Nginx/OpenResty domains.
 
 ```bash
-chmod +x /home/runner/work/Blue/Blue/build-authorized-nginx-xray-tunnel.sh
+chmod +x ./build-authorized-nginx-xray-tunnel.sh
 
 # using URL file
-/home/runner/work/Blue/Blue/build-authorized-nginx-xray-tunnel.sh \
+./build-authorized-nginx-xray-tunnel.sh \
   --input /path/to/urls.txt \
   --output-dir /tmp/nginx-xray-generated
 
 # or direct URLs
-/home/runner/work/Blue/Blue/build-authorized-nginx-xray-tunnel.sh \
+./build-authorized-nginx-xray-tunnel.sh \
   https://example.com https://openresty.example.net
 ```
 
