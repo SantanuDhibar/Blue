@@ -8,6 +8,8 @@ OUTPUT_DIR="./generated-tunnel"
 INPUT_FILE=""
 TIMEOUT=12
 INSECURE_TLS=0
+HTTP_PORTS="80"
+HTTPS_PORTS="443"
 
 usage() {
     cat <<'EOF'
@@ -20,6 +22,8 @@ Options:
   --output-dir DIR   Output directory (default: ./generated-tunnel)
   --xray-port PORT   Xray VLESS WS port (default: 10000)
   --xray-path PATH   WebSocket path (default: /vless)
+  --http-ports CSV   HTTP listen ports (default: 80)
+  --https-ports CSV  HTTPS listen ports (default: 443)
   --timeout SEC      Curl timeout in seconds (default: 12)
   --insecure         Allow insecure TLS checks for header fetches
   --help             Show this help
@@ -62,6 +66,22 @@ safe_origin_from_url() {
     printf "%s://%s\n" "$scheme" "$domain"
 }
 
+normalize_csv_ports() {
+    local raw="$1"
+    printf "%s" "$raw" | tr -d '[:space:]'
+}
+
+validate_csv_ports() {
+    local csv="$1"
+    [[ -n "$csv" ]] || return 0
+    local IFS=','
+    read -r -a ports <<< "$csv"
+    for port in "${ports[@]}"; do
+        [[ "$port" =~ ^[0-9]+$ ]] || return 1
+        (( port > 0 && port <= 65535 )) || return 1
+    done
+}
+
 is_nginx_like() {
     local server_header="${1:-}"
     local lc
@@ -74,6 +94,11 @@ validate_args() {
     [[ "$XRAY_PORT" =~ ^[0-9]+$ ]] || die "--xray-port must be numeric"
     (( XRAY_PORT > 0 && XRAY_PORT <= 65535 )) || die "--xray-port must be in 1..65535"
     [[ "$TIMEOUT" =~ ^[0-9]+$ ]] || die "--timeout must be numeric"
+    HTTP_PORTS=$(normalize_csv_ports "$HTTP_PORTS")
+    HTTPS_PORTS=$(normalize_csv_ports "$HTTPS_PORTS")
+    validate_csv_ports "$HTTP_PORTS" || die "--http-ports must be comma-separated 1..65535 values"
+    validate_csv_ports "$HTTPS_PORTS" || die "--https-ports must be comma-separated 1..65535 values"
+    [[ -n "$HTTP_PORTS" || -n "$HTTPS_PORTS" ]] || die "At least one of --http-ports or --https-ports must be set"
 }
 
 declare -a URLS=()
@@ -98,6 +123,16 @@ while [[ $# -gt 0 ]]; do
         --xray-path)
             [[ $# -ge 2 ]] || die "--xray-path requires a value"
             XRAY_PATH="$2"
+            shift 2
+            ;;
+        --http-ports)
+            [[ $# -ge 2 ]] || die "--http-ports requires a value"
+            HTTP_PORTS="$2"
+            shift 2
+            ;;
+        --https-ports)
+            [[ $# -ge 2 ]] || die "--https-ports requires a value"
+            HTTPS_PORTS="$2"
             shift 2
             ;;
         --timeout)
@@ -224,10 +259,32 @@ EOF
 EOF
     for domain in $(sort -u "$AUTHORIZED_FILE" 2>/dev/null); do
         origin="${DOMAIN_ORIGIN[$domain]:-https://$domain}"
+        http_listen_lines=""
+        https_listen_lines=""
+        ssl_block=""
+
+        if [[ -n "$HTTP_PORTS" ]]; then
+            IFS=',' read -r -a h_ports <<< "$HTTP_PORTS"
+            for p in "${h_ports[@]}"; do
+                http_listen_lines+="    listen $p;"$'\n'
+                http_listen_lines+="    listen [::]:$p;"$'\n'
+            done
+        fi
+
+        if [[ -n "$HTTPS_PORTS" ]]; then
+            IFS=',' read -r -a s_ports <<< "$HTTPS_PORTS"
+            for p in "${s_ports[@]}"; do
+                https_listen_lines+="    listen $p ssl http2;"$'\n'
+                https_listen_lines+="    listen [::]:$p ssl http2;"$'\n'
+            done
+            ssl_block=$'    ssl_certificate /etc/xray/xray.crt;\n    ssl_certificate_key /etc/xray/xray.key;\n'
+        fi
+
         cat <<EOF
 server {
-    listen 80;
-    server_name $domain;
+${http_listen_lines}${https_listen_lines}    server_name $domain;
+
+${ssl_block}
 
     location / {
         proxy_pass $origin;
@@ -270,6 +327,10 @@ Authorized Reverse Proxy Tunnel Deployment
 
 3) Configure Nginx/OpenResty:
    - Copy $NGINX_CONFIG_FILE to /etc/nginx/conf.d/authorized-vless.conf
+   - HTTP listen ports configured: ${HTTP_PORTS:-none}
+   - HTTPS listen ports configured: ${HTTPS_PORTS:-none}
+   - If HTTPS ports are enabled, ensure certificate/key exist:
+     /etc/xray/xray.crt and /etc/xray/xray.key
    - Validate config:
      nginx -t
    - Reload Nginx:

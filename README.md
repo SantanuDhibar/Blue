@@ -124,6 +124,8 @@ chmod +x ./build-authorized-nginx-xray-tunnel.sh
 # using URL file
 ./build-authorized-nginx-xray-tunnel.sh \
   --input /path/to/urls.txt \
+  --http-ports 80,8080 \
+  --https-ports 443,8443 \
   --output-dir /tmp/nginx-xray-generated
 
 # or direct URLs
