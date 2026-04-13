@@ -43,8 +43,8 @@ export WARNING="${RED}\e[5m"
 export UNDERLINE="\e[4m"
 
 # // Exporting URL Host
-export Server_URL="raw.githubusercontent.com/LamonLind/Blue/main/test"
-export Server1_URL="raw.githubusercontent.com/LamonLind/Blue/main/limit"
+export Server_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main/test"
+export Server1_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main/limit"
 export Server_Port="443"
 export Server_IP="underfined"
 export Script_Mode="Stable"

@@ -249,7 +249,7 @@ menu
 
 For issues or questions:
 - Telegram: @LamonLind
-- GitHub: https://github.com/LamonLind/Blue
+- GitHub: https://github.com/SantanuDhibar/Blue
 
 ---
 

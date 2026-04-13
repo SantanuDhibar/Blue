@@ -55,7 +55,7 @@ if [ "${EUID}" -ne 0 ]; then
 fi
 
 # Export GitHub repository URL
-REPO_URL="raw.githubusercontent.com/LamonLind/Blue/main"
+REPO_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main"
 
 # Self-update function
 self_update() {

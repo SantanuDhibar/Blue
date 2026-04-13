@@ -25,7 +25,7 @@ The enhanced `update.sh` script now intelligently manages features and updates i
 **Example Flow:**
 ```bash
 # User downloads and runs update.sh
-wget -O /usr/bin/update "https://raw.githubusercontent.com/LamonLind/Blue/main/update.sh"
+wget -O /usr/bin/update "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/update.sh"
 chmod +x /usr/bin/update
 update
 
@@ -67,7 +67,7 @@ The script manages features in these ways:
 ### Method 1: Quick Update (Downloads latest update.sh)
 ```bash
 # Download latest update.sh and run
-wget -O /usr/bin/update "https://raw.githubusercontent.com/LamonLind/Blue/main/update.sh"
+wget -O /usr/bin/update "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/update.sh"
 chmod +x /usr/bin/update
 update
 ```
@@ -84,7 +84,7 @@ menu → 29 (Update Script)
 ### Method 3: One-liner
 ```bash
 # Download, make executable, and run in one command
-wget -qO- https://raw.githubusercontent.com/LamonLind/Blue/main/update.sh | bash
+wget -qO- https://raw.githubusercontent.com/SantanuDhibar/Blue/main/update.sh | bash
 ```
 
 ## Update Options
@@ -299,7 +299,7 @@ Select option: 4
 ### Update script not updating itself
 ```bash
 # Manually download latest
-wget -O /usr/bin/update "https://raw.githubusercontent.com/LamonLind/Blue/main/update.sh"
+wget -O /usr/bin/update "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/update.sh"
 chmod +x /usr/bin/update
 ```
 
@@ -330,7 +330,7 @@ chmod -R 755 /etc/myvpn
 ping -c 3 raw.githubusercontent.com
 
 # Try with verbose output
-wget -v -O /usr/bin/test "https://raw.githubusercontent.com/LamonLind/Blue/main/menu4.sh"
+wget -v -O /usr/bin/test "https://raw.githubusercontent.com/SantanuDhibar/Blue/main/menu4.sh"
 ```
 
 ## Technical Details

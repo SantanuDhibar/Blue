@@ -43,8 +43,8 @@ export WARNING="${RED}\e[5m"
 export UNDERLINE="\e[4m"
 
 # // Exporting URL Host
-export Server_URL="raw.githubusercontent.com/LamonLind/Blue/main/test"
-export Server1_URL="raw.githubusercontent.com/LamonLind/Blue/main/limit"
+export Server_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main/test"
+export Server1_URL="raw.githubusercontent.com/SantanuDhibar/Blue/main/limit"
 export Server_Port="443"
 export Server_IP="underfined"
 export Script_Mode="Stable"
@@ -164,7 +164,7 @@ echo ""
 read -n 1 -s -r -p "Press any key to back on menu"
 menu
 }
-export sem=$( curl -s https://raw.githubusercontent.com/LamonLind/Blue/main/test/versions)
+export sem=$( curl -s https://raw.githubusercontent.com/SantanuDhibar/Blue/main/test/versions)
 export pak=$( cat /home/.ver)
 IPVPS=$(curl -s ipinfo.io/ip )
 ISPVPS=$( curl -s ipinfo.io/org )
@@ -232,7 +232,7 @@ case $opt in
 20) clear ; cat /root/log-install.txt ;;
 21) clear ; clearlog ;;
 #99) clear ; update ;;
-22) clear ; wget https://raw.githubusercontent.com/LamonLind/Blue/main/cf.sh && chmod +x cf.sh && ./cf.sh ;;
+22) clear ; wget https://raw.githubusercontent.com/SantanuDhibar/Blue/main/cf.sh && chmod +x cf.sh && ./cf.sh ;;
 26) clear ; menu-slowdns ;;
 27) clear ; menu-captured-hosts ;;
 28) clear ; menu-wildcard ;;
