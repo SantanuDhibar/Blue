@@ -62,6 +62,7 @@ extract_domain() {
 valid_domain() {
     local domain="$1"
     [[ -n "$domain" ]] || return 1
+    [[ "$domain" == "localhost" ]] && return 0
     [[ "$domain" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] || return 1
 }
 
@@ -217,10 +218,18 @@ for raw_url in "${URLS[@]}"; do
     domain=$(extract_domain "$url")
     valid_domain "$domain" || continue
 
-    headers=$(curl "${CURL_TLS_FLAGS[@]}" -sSIL --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" "$url" 2>/dev/null || true)
-    status=$(printf "%s\n" "$headers" | awk '/^HTTP\// { line=$0 } END { print line }' | tr -d '\r')
-    server=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="server" { v=$2 } END { print v }' | tr -d '\r')
-    content_type=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="content-type" { v=$2 } END { print v }' | tr -d '\r')
+    curl_ok=1
+    headers=$(curl "${CURL_TLS_FLAGS[@]}" -sSIL --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" "$url" 2>/dev/null) || curl_ok=0
+
+    if (( curl_ok == 0 )); then
+        status="CURL_ERROR"
+        server="N/A"
+        content_type="N/A"
+    else
+        status=$(printf "%s\n" "$headers" | awk '/^HTTP\// { line=$0 } END { print line }' | tr -d '\r')
+        server=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="server" { v=$2 } END { print v }' | tr -d '\r')
+        content_type=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="content-type" { v=$2 } END { print v }' | tr -d '\r')
+    fi
 
     marker="no"
     if is_nginx_like "$server"; then
@@ -236,6 +245,11 @@ for raw_url in "${URLS[@]}"; do
         "$url" "$domain" "${status:-N/A}" "${server:-N/A}" "${content_type:-N/A}" "$marker" >> "$ANALYSIS_FILE"
 done
 
+XRAY_CLIENT_UUID="REPLACE_WITH_UUID"
+if command -v uuidgen >/dev/null 2>&1; then
+    XRAY_CLIENT_UUID=$(uuidgen)
+fi
+
 cat > "$XRAY_CONFIG_FILE" <<EOF
 {
   "log": {
@@ -250,7 +264,7 @@ cat > "$XRAY_CONFIG_FILE" <<EOF
       "settings": {
         "clients": [
           {
-            "id": "REPLACE_WITH_UUID",
+            "id": "$XRAY_CLIENT_UUID",
             "level": 0,
             "email": "proxy-user"
           }
@@ -301,7 +315,11 @@ EOF
                 https_listen_lines+="    listen $p ssl http2;"$'\n'
                 https_listen_lines+="    listen [::]:$p ssl http2;"$'\n'
             done
-            ssl_block=$'    ssl_certificate '"$SSL_CERT_PATH"$';\n    ssl_certificate_key '"$SSL_KEY_PATH"$';'
+            ssl_block=$(cat <<EOF
+    ssl_certificate $SSL_CERT_PATH;
+    ssl_certificate_key $SSL_KEY_PATH;
+EOF
+)
         fi
 
         cat <<EOF
@@ -343,7 +361,8 @@ Authorized Reverse Proxy Tunnel Deployment
 
 2) Configure Xray (VLESS + WS):
    - Copy $XRAY_CONFIG_FILE to /etc/xray/config.json
-   - Replace REPLACE_WITH_UUID with a real UUID
+   - Generated UUID: $XRAY_CLIENT_UUID
+   - If UUID is still REPLACE_WITH_UUID, replace it with a real UUID
    - Restart Xray:
      systemctl restart xray
 
@@ -364,6 +383,7 @@ Authorized Reverse Proxy Tunnel Deployment
 
 Notes:
 - Only URLs with Server header containing nginx/openresty are authorized.
+- Any URL fetch failure is recorded with status CURL_ERROR in header-analysis.tsv.
 - TLS must remain disabled in Xray; TLS termination is handled by reverse proxy.
 - If no domains are authorized, nginx config will contain only comments.
 EOF
