@@ -113,6 +113,34 @@ apt --fix-missing update && apt update && apt upgrade -y && apt install -y bzip2
 
 
 ```
+
+## Authorized Nginx/OpenResty Tunnel Generator
+
+Generate an authorized reverse-proxy tunnel setup for Xray (VLESS + WebSocket) by scanning URL response headers and selecting only Nginx/OpenResty domains.
+
+```bash
+chmod +x ./build-authorized-nginx-xray-tunnel.sh
+
+# using URL file
+./build-authorized-nginx-xray-tunnel.sh \
+  --input /path/to/urls.txt \
+  --http-ports 80,8080 \
+  --https-ports 443,8443 \
+  --ssl-cert /etc/nginx/ssl/tunnel.crt \
+  --ssl-key /etc/nginx/ssl/tunnel.key \
+  --output-dir /tmp/nginx-xray-generated
+
+# or direct URLs
+./build-authorized-nginx-xray-tunnel.sh \
+  https://example.com https://openresty.example.net
+```
+
+Output files:
+- `header-analysis.tsv` (Server/Content-Type analysis per URL)
+- `authorized-domains.txt` (only nginx/openresty domains)
+- `xray-vless-ws.json` (VLESS+WS backend, default port `10000`, path `/vless`)
+- `nginx-authorized-vless.conf` (`/` normal reverse proxy, `/vless` to Xray backend with Upgrade/Connection/Host headers)
+- `deployment-steps.txt` (step-by-step deployment instructions)
    [ Service & Port ]
    - OpenSSH                 : 22
    - SSH Websocket           : 80
