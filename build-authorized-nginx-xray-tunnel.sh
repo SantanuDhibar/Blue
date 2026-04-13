@@ -7,9 +7,12 @@ XRAY_PATH="/vless"
 OUTPUT_DIR="./generated-tunnel"
 INPUT_FILE=""
 TIMEOUT=12
+CONNECT_TIMEOUT=5
 INSECURE_TLS=0
 HTTP_PORTS="80"
 HTTPS_PORTS="443"
+SSL_CERT_PATH="/etc/nginx/ssl/tunnel.crt"
+SSL_KEY_PATH="/etc/nginx/ssl/tunnel.key"
 
 usage() {
     cat <<'EOF'
@@ -24,6 +27,11 @@ Options:
   --xray-path PATH   WebSocket path (default: /vless)
   --http-ports CSV   HTTP listen ports (default: 80)
   --https-ports CSV  HTTPS listen ports (default: 443)
+  --connect-timeout SEC  Curl connect timeout (default: 5)
+  --ssl-cert PATH    TLS certificate path for generated nginx HTTPS listeners
+                     (default: /etc/nginx/ssl/tunnel.crt)
+  --ssl-key PATH     TLS certificate key path for generated nginx HTTPS listeners
+                     (default: /etc/nginx/ssl/tunnel.key)
   --timeout SEC      Curl timeout in seconds (default: 12)
   --insecure         Allow insecure TLS checks for header fetches
   --help             Show this help
@@ -94,6 +102,7 @@ validate_args() {
     [[ "$XRAY_PORT" =~ ^[0-9]+$ ]] || die "--xray-port must be numeric"
     (( XRAY_PORT > 0 && XRAY_PORT <= 65535 )) || die "--xray-port must be in 1..65535"
     [[ "$TIMEOUT" =~ ^[0-9]+$ ]] || die "--timeout must be numeric"
+    [[ "$CONNECT_TIMEOUT" =~ ^[0-9]+$ ]] || die "--connect-timeout must be numeric"
     HTTP_PORTS=$(normalize_csv_ports "$HTTP_PORTS")
     HTTPS_PORTS=$(normalize_csv_ports "$HTTPS_PORTS")
     validate_csv_ports "$HTTP_PORTS" || die "--http-ports must be comma-separated 1..65535 values"
@@ -138,6 +147,21 @@ while [[ $# -gt 0 ]]; do
         --timeout)
             [[ $# -ge 2 ]] || die "--timeout requires a value"
             TIMEOUT="$2"
+            shift 2
+            ;;
+        --connect-timeout)
+            [[ $# -ge 2 ]] || die "--connect-timeout requires a value"
+            CONNECT_TIMEOUT="$2"
+            shift 2
+            ;;
+        --ssl-cert)
+            [[ $# -ge 2 ]] || die "--ssl-cert requires a value"
+            SSL_CERT_PATH="$2"
+            shift 2
+            ;;
+        --ssl-key)
+            [[ $# -ge 2 ]] || die "--ssl-key requires a value"
+            SSL_KEY_PATH="$2"
             shift 2
             ;;
         --insecure)
@@ -193,7 +217,7 @@ for raw_url in "${URLS[@]}"; do
     domain=$(extract_domain "$url")
     valid_domain "$domain" || continue
 
-    headers=$(curl "${CURL_TLS_FLAGS[@]}" -sSIL --connect-timeout 5 --max-time "$TIMEOUT" "$url" 2>/dev/null || true)
+    headers=$(curl "${CURL_TLS_FLAGS[@]}" -sSIL --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" "$url" 2>/dev/null || true)
     status=$(printf "%s\n" "$headers" | awk '/^HTTP\// { line=$0 } END { print line }' | tr -d '\r')
     server=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="server" { v=$2 } END { print v }' | tr -d '\r')
     content_type=$(printf "%s\n" "$headers" | awk -F': *' 'tolower($1)=="content-type" { v=$2 } END { print v }' | tr -d '\r')
@@ -277,15 +301,13 @@ EOF
                 https_listen_lines+="    listen $p ssl http2;"$'\n'
                 https_listen_lines+="    listen [::]:$p ssl http2;"$'\n'
             done
-            ssl_block=$'    ssl_certificate /etc/xray/xray.crt;\n    ssl_certificate_key /etc/xray/xray.key;\n'
+            ssl_block=$'    ssl_certificate '"$SSL_CERT_PATH"$';\n    ssl_certificate_key '"$SSL_KEY_PATH"$';'
         fi
 
         cat <<EOF
 server {
 ${http_listen_lines}${https_listen_lines}    server_name $domain;
-
 ${ssl_block}
-
     location / {
         proxy_pass $origin;
         proxy_http_version 1.1;
@@ -330,7 +352,7 @@ Authorized Reverse Proxy Tunnel Deployment
    - HTTP listen ports configured: ${HTTP_PORTS:-none}
    - HTTPS listen ports configured: ${HTTPS_PORTS:-none}
    - If HTTPS ports are enabled, ensure certificate/key exist:
-     /etc/xray/xray.crt and /etc/xray/xray.key
+     ${SSL_CERT_PATH} and ${SSL_KEY_PATH}
    - Validate config:
      nginx -t
    - Reload Nginx:
