@@ -13,6 +13,8 @@ HTTP_PORTS="80"
 HTTPS_PORTS="443"
 SSL_CERT_PATH="/etc/nginx/ssl/tunnel.crt"
 SSL_KEY_PATH="/etc/nginx/ssl/tunnel.key"
+SERVER_SNI=""
+CLIENT_PORT="443"
 
 usage() {
     cat <<'EOF'
@@ -32,6 +34,12 @@ Options:
                      (default: /etc/nginx/ssl/tunnel.crt)
   --ssl-key PATH     TLS certificate key path for generated nginx HTTPS listeners
                      (default: /etc/nginx/ssl/tunnel.key)
+  --server-sni SNI   Your Xray server domain/IP used as SNI and Host header in
+                     generated client VLESS links (e.g. myxraydomain.com).
+                     When set, each authorized nginx domain becomes the connection
+                     address (bug host) in the client URI while SNI/Host stay as
+                     this value.  Omit to skip client link generation.
+  --client-port PORT Port used in generated client VLESS links (default: 443)
   --timeout SEC      Curl timeout in seconds (default: 12)
   --insecure         Allow insecure TLS checks for header fetches
   --help             Show this help
@@ -109,6 +117,8 @@ validate_args() {
     validate_csv_ports "$HTTP_PORTS" || die "--http-ports must be comma-separated 1..65535 values"
     validate_csv_ports "$HTTPS_PORTS" || die "--https-ports must be comma-separated 1..65535 values"
     [[ -n "$HTTP_PORTS" || -n "$HTTPS_PORTS" ]] || die "At least one of --http-ports or --https-ports must be set"
+    [[ "$CLIENT_PORT" =~ ^[0-9]+$ ]] || die "--client-port must be numeric"
+    (( CLIENT_PORT > 0 && CLIENT_PORT <= 65535 )) || die "--client-port must be in 1..65535"
 }
 
 declare -a URLS=()
@@ -165,6 +175,16 @@ while [[ $# -gt 0 ]]; do
             SSL_KEY_PATH="$2"
             shift 2
             ;;
+        --server-sni)
+            [[ $# -ge 2 ]] || die "--server-sni requires a value"
+            SERVER_SNI="$2"
+            shift 2
+            ;;
+        --client-port)
+            [[ $# -ge 2 ]] || die "--client-port requires a value"
+            CLIENT_PORT="$2"
+            shift 2
+            ;;
         --insecure)
             INSECURE_TLS=1
             shift
@@ -201,6 +221,7 @@ AUTHORIZED_FILE="$OUTPUT_DIR/authorized-domains.txt"
 XRAY_CONFIG_FILE="$OUTPUT_DIR/xray-vless-ws.json"
 NGINX_CONFIG_FILE="$OUTPUT_DIR/nginx-authorized-vless.conf"
 DEPLOYMENT_FILE="$OUTPUT_DIR/deployment-steps.txt"
+CLIENT_LINKS_FILE="$OUTPUT_DIR/client-vless-links.txt"
 
 printf "url\tdomain\tstatus\tserver\tcontent_type\tnginx_or_openresty\n" > "$ANALYSIS_FILE"
 : > "$AUTHORIZED_FILE"
@@ -351,6 +372,47 @@ EOF
     done
 } > "$NGINX_CONFIG_FILE"
 
+# ── Client VLESS link generation ──────────────────────────────────────────────
+# When --server-sni is provided, generate one VLESS URI per authorized nginx
+# domain.  Each nginx domain acts as the "bug host" (Address field) while SNI
+# and Host header both point to the user's own Xray server domain.
+#
+# Client connection flow:
+#   Client -> nginx-domain:CLIENT_PORT (bug host) -> (SNI pass-through / CDN) -> SERVER_SNI -> Xray
+#
+# VLESS URI format:
+#   vless://UUID@nginx-domain:PORT?type=ws&path=PATH&encryption=none
+#          &security=tls&sni=SERVER_SNI&host=SERVER_SNI#VLESS_nginx-domain
+# ─────────────────────────────────────────────────────────────────────────────
+{
+    if [[ -n "$SERVER_SNI" ]]; then
+        printf "# Client VLESS links for nginx bug-host tunneling\n"
+        printf "# SNI: %s | Host: %s | Port: %s | Path: %s\n" \
+            "$SERVER_SNI" "$SERVER_SNI" "$CLIENT_PORT" "$XRAY_PATH"
+        printf "# Each address below is an nginx domain used as the connection (bug) host.\n\n"
+
+        # Encode only non-leading slashes in the path (leading slash is kept as-is
+        # per standard WebSocket path notation used in VLESS URIs).
+        encoded_path=$(printf "%s" "$XRAY_PATH" | sed 's|^\(/\)\(.*\)$|\1\2|; s|/|%2F|2g')
+
+        client_link_count=0
+        while IFS= read -r bug_domain; do
+            [[ -z "$bug_domain" ]] && continue
+            link="vless://${XRAY_CLIENT_UUID}@${bug_domain}:${CLIENT_PORT}?type=ws&path=${encoded_path}&encryption=none&security=tls&sni=${SERVER_SNI}&host=${SERVER_SNI}#VLESS_${bug_domain}"
+            printf "%s\n" "$link"
+            client_link_count=$(( client_link_count + 1 ))
+        done < <(sort -u "$AUTHORIZED_FILE" 2>/dev/null)
+
+        if (( client_link_count == 0 )); then
+            printf "# No authorized nginx domains found — no client links generated.\n"
+        fi
+    else
+        client_link_count=0
+        printf "# Client VLESS links not generated.\n"
+        printf "# Re-run with --server-sni YOUR_SERVER_DOMAIN to produce client VLESS links.\n"
+    fi
+} > "$CLIENT_LINKS_FILE"
+
 cat > "$DEPLOYMENT_FILE" <<EOF
 Authorized Reverse Proxy Tunnel Deployment
 =========================================
@@ -381,11 +443,21 @@ Authorized Reverse Proxy Tunnel Deployment
    - Ensure WebSocket upgrade works on path: $XRAY_PATH
    - Ensure normal content still works on: /
 
+5) Client VLESS links (nginx bug-host tunneling):
+   - See $CLIENT_LINKS_FILE
+   - Each link uses an nginx domain as the connection address (bug host).
+   - SNI and Host header are set to: ${SERVER_SNI:-(not configured, re-run with --server-sni)}
+   - Client connects to the nginx domain's IP but the TLS SNI identifies your
+     server domain, allowing traffic to pass through nginx-hosted CDN edges.
+   - Import any link from that file into your Xray/v2ray client app.
+
 Notes:
 - Only URLs with Server header containing nginx/openresty are authorized.
 - Any URL fetch failure is recorded with status CURL_ERROR in header-analysis.tsv.
 - TLS must remain disabled in Xray; TLS termination is handled by reverse proxy.
 - If no domains are authorized, nginx config will contain only comments.
+- Use --server-sni to specify your Xray server domain for client link generation.
+- Use --client-port to change the port used in client VLESS links (default: 443).
 EOF
 
 echo "Generated:"
@@ -393,6 +465,12 @@ echo "  Header analysis : $ANALYSIS_FILE"
 echo "  Authorized list : $AUTHORIZED_FILE"
 echo "  Xray config     : $XRAY_CONFIG_FILE"
 echo "  Nginx config    : $NGINX_CONFIG_FILE"
+echo "  Client links    : $CLIENT_LINKS_FILE"
 echo "  Deploy steps    : $DEPLOYMENT_FILE"
 echo
 echo "Authorized domains count: $(wc -l < "$AUTHORIZED_FILE" | tr -d ' ')"
+if [[ -n "$SERVER_SNI" ]]; then
+    echo "Client VLESS links  : $client_link_count (SNI/Host -> $SERVER_SNI, port $CLIENT_PORT)"
+else
+    echo "Client VLESS links  : not generated (use --server-sni to enable)"
+fi
